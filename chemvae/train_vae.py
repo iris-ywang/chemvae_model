@@ -14,7 +14,7 @@ encoder and decoder portions of the network
 import argparse
 import numpy as np
 import tensorflow as tf
-config = tf.ConfigProto()
+config = tf.compat.v1.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.5
 config.gpu_options.allow_growth = True
 import yaml
@@ -23,14 +23,14 @@ import os
 from keras import backend as K
 from keras.models import Model
 from keras.optimizers import SGD, Adam, RMSprop
-from . import hyperparameters
-from . import mol_utils as mu
-from . import mol_callbacks as mol_cb
+from chemvae import hyperparameters
+from chemvae import mol_utils as mu
+from chemvae import mol_callbacks as mol_cb
 from keras.callbacks import CSVLogger
-from .models import encoder_model, load_encoder
-from .models import decoder_model, load_decoder
-from .models import property_predictor_model, load_property_predictor
-from .models import variational_layers
+from chemvae.models import encoder_model, load_encoder
+from chemvae.models import decoder_model, load_decoder
+from chemvae.models import property_predictor_model, load_property_predictor
+from chemvae.models import variational_layers
 from functools import partial
 from keras.layers import Lambda
 
@@ -381,12 +381,14 @@ def main_property_run(params):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-e', '--exp_file',
-                        help='experiment file', default='exp.json')
-    parser.add_argument('-d', '--directory',
-                        help='exp directory', default=None)
-    args = vars(parser.parse_args())
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-e', '--exp_file',
+    #                     help='experiment file', default='exp.json')
+    # parser.add_argument('-d', '--directory',
+    #                     help='exp directory', default=None)
+    # args = vars(parser.parse_args())
+
+    args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
 
