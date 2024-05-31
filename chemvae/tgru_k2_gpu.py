@@ -77,19 +77,19 @@ class TerminalGRU(GRU):
     # Heavily adapted from GRU in recurrent.py
     # Implements professor forcing
 
-    def __init__(self, units,
+    def __init__(self, tgru_units,
                  temperature=1., rnd_seed=None, recurrent_dropout=0.0,
                  **kwargs):
         # @param: temperature - sampling temperature
         # Annealing will be handled in the callbacks
-        super(TerminalGRU, self).__init__(units, **kwargs)
-        self.units = units
+        super(TerminalGRU, self).__init__(tgru_units, **kwargs)
+        self.tgru_units = tgru_units
         self.temperature = temperature
         self.rnd_seed = rnd_seed
         self.uses_learning_phase = True
         self.supports_masking = False
-        self.units = units
-        self.recurrent_dropout = min(1., max(0., recurrent_dropout))
+        self.tgru_units = tgru_units
+        self.tgru_recurrent_dropout = min(1., max(0., recurrent_dropout))
         self.input_spec = [InputSpec(ndim=3),
                            InputSpec(ndim=3)]
 
@@ -101,14 +101,14 @@ class TerminalGRU(GRU):
         batch_size = input_shape[0] if self.stateful else None
         self.input_dim = input_shape[2]
         self.input_spec = [InputSpec(shape=(batch_size, None, self.input_dim)),
-                           InputSpec(shape=(batch_size, None, self.units))]
-        self.state_spec = InputSpec(shape=(batch_size, self.units))
+                           InputSpec(shape=(batch_size, None, self.tgru_units))]
+        self.state_spec = InputSpec(shape=(batch_size, self.tgru_units))
 
         self.states = [None]
         if self.stateful:
             self.reset_states()
 
-        self.kernel = self.add_weight((self.input_dim, self.units * 3),
+        self.kernel = self.add_weight(shape=(self.input_dim, self.tgru_units * 3),
                                       name='kernel',
                                       initializer=self.kernel_initializer,
                                       regularizer=self.kernel_regularizer,
@@ -118,14 +118,14 @@ class TerminalGRU(GRU):
         # this last recurrent weight applied to true sequence input from prev. timestep,
         #   or sampled output from prev. time step.
         self.recurrent_kernel = self.add_weight(
-            (self.units, self.units * 4),
+            shape=(self.tgru_units, self.tgru_units * 4),
             name='recurrent_kernel',
             initializer=self.recurrent_initializer,
             regularizer=self.recurrent_regularizer,
             constraint=self.recurrent_constraint)
 
         if self.use_bias:
-            self.bias = self.add_weight((self.units * 4,),
+            self.bias = self.add_weight(shape=(self.tgru_units * 4,),
                                         name='bias',
                                         initializer='zero',
                                         regularizer=self.bias_regularizer,
@@ -133,21 +133,21 @@ class TerminalGRU(GRU):
         else:
             self.bias = None
 
-        self.kernel_z = self.kernel[:, :self.units]
-        self.recurrent_kernel_z = self.recurrent_kernel[:, :self.units]
-        self.kernel_r = self.kernel[:, self.units: self.units * 2]
+        self.kernel_z = self.kernel[:, :self.tgru_units]
+        self.recurrent_kernel_z = self.recurrent_kernel[:, :self.tgru_units]
+        self.kernel_r = self.kernel[:, self.tgru_units: self.tgru_units * 2]
         self.recurrent_kernel_r = self.recurrent_kernel[:,
-                                  self.units:
-                                  self.units * 2]
-        self.kernel_h = self.kernel[:, self.units * 2:]
-        self.recurrent_kernel_h = self.recurrent_kernel[:, self.units * 2:self.units * 3]
-        self.recurrent_kernel_y = self.recurrent_kernel[:, self.units * 3:]
+                                  self.tgru_units:
+                                  self.tgru_units * 2]
+        self.kernel_h = self.kernel[:, self.tgru_units * 2:]
+        self.recurrent_kernel_h = self.recurrent_kernel[:, self.tgru_units * 2:self.tgru_units * 3]
+        self.recurrent_kernel_y = self.recurrent_kernel[:, self.tgru_units * 3:]
 
         if self.use_bias:
-            self.bias_z = self.bias[:self.units]
-            self.bias_r = self.bias[self.units: self.units * 2]
-            self.bias_h = self.bias[self.units * 2: self.units * 3]
-            self.bias_h = self.bias[self.units * 3:]
+            self.bias_z = self.bias[:self.tgru_units]
+            self.bias_r = self.bias[self.tgru_units: self.tgru_units * 2]
+            self.bias_h = self.bias[self.tgru_units * 2: self.tgru_units * 3]
+            self.bias_h = self.bias[self.tgru_units * 3:]
         else:
             self.bias_z = None
             self.bias_r = None
@@ -158,7 +158,7 @@ class TerminalGRU(GRU):
         # build an all-zero tensor of shape [(samples, output_dim), (samples, output_dim)]
         initial_state = K.zeros_like(x)  # (samples, timesteps, input_dim)
         initial_state = K.sum(initial_state, axis=1)  # (samples, input_dim)
-        reducer = K.random_uniform((self.input_dim, self.units))
+        reducer = K.random_uniform((self.input_dim, self.tgru_units))
         reducer = reducer / K.exp(reducer)
 
         initial_state = K.dot(initial_state, reducer)  # (samples, output_dim)
@@ -172,12 +172,12 @@ class TerminalGRU(GRU):
 
     def get_constants(self, inputs, training=None):
         constants = []
-        if 0. < self.recurrent_dropout < 1.:
+        if 0. < self.tgru_recurrent_dropout < 1.:
             ones = K.ones_like(K.reshape(inputs[:, 0, 0], (-1, 1)))
-            ones = K.tile(ones, (1, self.units))
+            ones = K.tile(ones, (1, self.tgru_units))
 
             def dropped_inputs():
-                return K.dropout(ones, self.recurrent_dropout)
+                return K.dropout(ones, self.tgru_recurrent_dropout)
 
             rec_dp_mask = [K.in_train_phase(dropped_inputs,
                                             ones,
@@ -239,7 +239,7 @@ class TerminalGRU(GRU):
         last_output, outputs, states = sampled_rnn(self.step,
                                                    all_inputs,
                                                    initial_states,
-                                                   self.units,
+                                                   self.tgru_units,
                                                    self.rnd_seed,
                                                    go_backwards=self.go_backwards,
                                                    rec_dp_constants=recurrent_dropout_constants,
@@ -263,7 +263,7 @@ class TerminalGRU(GRU):
             return (input_shapes[1][0], input_shapes[1][1])
 
     def get_config(self):
-        config = {'units': self.units,
+        config = {'units': self.tgru_units,
                   'temperature': self.temperature,
                   'rnd_seed': self.rnd_seed}
         base_config = super(TerminalGRU, self).get_config()
@@ -313,7 +313,7 @@ class TerminalGRU(GRU):
         initial_states = states['initial_states']
         random_cutoff_vec = states['random_cutoff_prob']
 
-        if self.recurrent_dropout > 0:
+        if self.tgru_recurrent_dropout > 0:
             rec_dp_mask = states['rec_dp_mask']
         else:
             rec_dp_mask = np.array([1., 1., 1., 1.], dtype='float32')
@@ -327,15 +327,15 @@ class TerminalGRU(GRU):
             h = K.permute_dimensions(h, axes)
 
             prev_layer_input = h[0:1, :, :]
-            true_input = h[1:, :, :self.units]
+            true_input = h[1:, :, :self.tgru_units]
 
             # this should correspond  to true input
             prev_sampled_output = true_input
 
             if self.implementation == 0:
-                x_z = prev_layer_input[0, :, :self.units]
-                x_r = prev_layer_input[0, :, self.units: 2 * self.units]
-                x_h = prev_layer_input[0, :, 2 * self.units:]
+                x_z = prev_layer_input[0, :, :self.tgru_units]
+                x_r = prev_layer_input[0, :, self.tgru_units: 2 * self.tgru_units]
+                x_h = prev_layer_input[0, :, 2 * self.tgru_units:]
             else:
                 raise ValueError('Implementation type ' + self.implementation + ' is invalid')
 
@@ -366,9 +366,9 @@ class TerminalGRU(GRU):
             prev_layer_input = h[0:1, :, :]
 
             if self.implementation == 0:
-                x_z = prev_layer_input[0, :, :self.units]
-                x_r = prev_layer_input[0, :, self.units: 2 * self.units]
-                x_h = prev_layer_input[0, :, 2 * self.units:]
+                x_z = prev_layer_input[0, :, :self.tgru_units]
+                x_r = prev_layer_input[0, :, self.tgru_units: 2 * self.tgru_units]
+                x_h = prev_layer_input[0, :, 2 * self.tgru_units:]
 
             z = self.recurrent_activation(x_z + K.dot(h_tm1 * rec_dp_mask[0],
                                                       self.recurrent_kernel_z))
@@ -392,3 +392,75 @@ class TerminalGRU(GRU):
         output_2d_tensor = K.squeeze(output_2d_tensor, 1)
 
         return output_2d_tensor, [output_2d_tensor]
+
+
+
+    ############################################
+    ## Preprocessing function copied from Keras 2.0.6/recurrent.py
+    ############################################
+
+    def preprocess_input(self, inputs, training=None):
+        if self.implementation == 0:
+            input_shape = K.int_shape(inputs)
+            input_dim = input_shape[2]
+            timesteps = input_shape[1]
+
+            x_z = self._time_distributed_dense(inputs, self.kernel_z, self.bias_z,
+                                          self.dropout, input_dim, self.units,
+                                          timesteps, training=training)
+            x_r = self._time_distributed_dense(inputs, self.kernel_r, self.bias_r,
+                                          self.dropout, input_dim, self.units,
+                                          timesteps, training=training)
+            x_h = self._time_distributed_dense(inputs, self.kernel_h, self.bias_h,
+                                          self.dropout, input_dim, self.units,
+                                          timesteps, training=training)
+            return K.concatenate([x_z, x_r, x_h], axis=2)
+        else:
+            return inputs
+
+    @staticmethod
+    def _time_distributed_dense(x, w, b=None, dropout=None,
+                                input_dim=None, output_dim=None,
+                                timesteps=None, training=None):
+        """Apply `y . w + b` for every temporal slice y of x.
+
+        # Arguments
+            x: input tensor.
+            w: weight matrix.
+            b: optional bias vector.
+            dropout: wether to apply dropout (same dropout mask
+                for every temporal slice of the input).
+            input_dim: integer; optional dimensionality of the input.
+            output_dim: integer; optional dimensionality of the output.
+            timesteps: integer; optional number of timesteps.
+            training: training phase tensor or boolean.
+
+        # Returns
+            Output tensor.
+        """
+        if not input_dim:
+            input_dim = K.shape(x)[2]
+        if not timesteps:
+            timesteps = K.shape(x)[1]
+        if not output_dim:
+            output_dim = K.shape(w)[1]
+
+        if dropout is not None and 0. < dropout < 1.:
+            # apply the same dropout pattern at every timestep
+            ones = K.ones_like(K.reshape(x[:, 0, :], (-1, input_dim)))
+            dropout_matrix = K.dropout(ones, dropout)
+            expanded_dropout_matrix = K.repeat(dropout_matrix, timesteps)
+            x = K.in_train_phase(x * expanded_dropout_matrix, x, training=training)
+
+        # collapse time dimension and batch dimension together
+        x = K.reshape(x, (-1, input_dim))
+        x = K.dot(x, w)
+        if b is not None:
+            x = K.bias_add(x, b)
+        # reshape to 3D tensor
+        if K.backend() == 'tensorflow':
+            x = K.reshape(x, K.stack([-1, timesteps, output_dim]))
+            x.set_shape([None, None, output_dim])
+        else:
+            x = K.reshape(x, (-1, timesteps, output_dim))
+        return x
