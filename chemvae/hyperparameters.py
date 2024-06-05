@@ -14,6 +14,10 @@ def load_params(param_file=None, verbose=True):
             print('rest of parameters are set as default')
     parameters = {
 
+        # data parameters
+        "data_size": None,              # number of molecules in the dataset
+        "training_batch_size": 1260,
+
         # for starting model from a checkpoint
         'reload_model': False,
         'prev_epochs': 0,
@@ -41,6 +45,7 @@ def load_params(param_file=None, verbose=True):
         'terminal_GRU_implementation': 0, # use CPU intensive implementation; other implementation modes (1 - GPU, 2- memory) are not yet implemented
         'tgru_dropout': 0.0,
         'temperature': 1.00,            # amount of noise for sampling the final output 
+        'paired_output': False,         # whether to use paired output for the decoder
 
         # middle layer parameters 
         'hg_growth_factor': 1.4928245388, # growth factor applied to determine size of next middle layer.

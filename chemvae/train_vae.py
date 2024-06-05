@@ -36,7 +36,7 @@ from keras.layers import Lambda
 
 
 
-def vectorize_data(params):
+def vectorize_data(params, n_samples=None):
     # @out : Y_train /Y_test : each is list of datasets.
     #        i.e. if reg_tasks only : Y_train_reg = Y_train[0]
     #             if logit_tasks only : Y_train_logit = Y_train[0]
@@ -74,7 +74,7 @@ def vectorize_data(params):
 
     ## Load data if no properties
     else:
-        smiles = mu.load_smiles_and_data_df(params['data_file'], MAX_LEN)
+        smiles = mu.load_smiles_and_data_df(params['data_file'], MAX_LEN)[:1260]
 
     if 'limit_data' in params.keys():
         sample_idx = np.random.choice(np.arange(len(smiles)), params['limit_data'], replace=False)
@@ -172,6 +172,13 @@ def load_models(params):
         x_out = decoder(z_samp)
 
     x_out = Lambda(identity, name='x_pred')(x_out)
+
+    if params['paired_output']:
+        # Add the "swap_halves" operation on x_out to the model.
+        # This is done to make the model output the same as the input,
+        # but with the first half of the input swapped with the second half.
+        x_out = Lambda(swap_halves, name='x_pred_swapped')(x_out)
+
     model_outputs = [x_out, z_mean_log_var_output]
 
     AE_only_model = Model(x_in, model_outputs)
@@ -213,6 +220,25 @@ def load_models(params):
         return AE_only_model, encoder, decoder, kl_loss_var
 
 
+# Function to take in a KerasTensor of shape (dim_a, dim_b) and
+# return a tensor of the same shape, but the first half in dim_a
+# swaps position with the second half. For example, if the input
+# keras tensor is in shape (10,3), the output tensor will be of
+# shape (10,3) but the first 5 rows will be swapped with the
+# last 5 rows. So if you have
+# [[1,2,3,4,5], [10,20,30,40,50], [6,7,8,9,10], [60,70,80,90,100]],
+# the output will be
+# [[6,7,8,9,10], [60,70,80,90,100], [1,2,3,4,5], [10,20,30,40,50]].
+# Input tye: keras.engine.keras_tensor.KerasTensor
+# Output type: keras.engine.keras_tensor.KerasTensor
+
+def swap_halves(x: tf.Tensor):
+    dim_a = x.shape[0]
+    half_dim_a = dim_a // 2
+    return tf.concat([x[half_dim_a:], x[:half_dim_a]], axis=0)
+
+
+
 def kl_loss(truth_dummy, x_mean_log_var_output):
     x_mean, x_log_var = tf.split(x_mean_log_var_output, 2, axis=1)
     print('x_mean shape in kl_loss: ', x_mean.get_shape())
@@ -223,9 +249,14 @@ def kl_loss(truth_dummy, x_mean_log_var_output):
 
 
 def main_no_prop(params):
+
+    def vae_anneal_metric(y_true, y_pred):
+        return kl_loss_var
+
+
     start_time = time.time()
 
-    X_train, X_test = vectorize_data(params)
+    X_train_all, X_test_all = vectorize_data(params)
     AE_only_model, encoder, decoder, kl_loss_var = load_models(params)
 
     # compile models
@@ -240,6 +271,13 @@ def main_no_prop(params):
 
     model_losses = {'x_pred': params['loss'],
                         'z_mean_log_var': kl_loss}
+    xent_loss_weight = K.variable(params['xent_loss_weight'])
+    AE_only_model.compile(
+        loss=model_losses,
+        loss_weights=[xent_loss_weight, kl_loss_var],
+        optimizer=optim,
+        metrics={'x_pred': ['categorical_accuracy', vae_anneal_metric]}
+    )
 
     # vae metrics, callbacks
     vae_sig_schedule = partial(mol_cb.sigmoid_schedule, slope=params['anneal_sigmod_slope'],
@@ -250,37 +288,52 @@ def main_no_prop(params):
     csv_clb = CSVLogger(params["history_file"], append=False)
     callbacks = [ vae_anneal_callback, csv_clb]
 
+    # Load data
+    if params["data_size"] is None:
+        batch_size = len(X_train_all)
+        n_training_batch = 1
+    else:
+        batch_size = params["training_batch_size"]
+        n_training_batch = int(params["data_size"] // batch_size)
 
-    def vae_anneal_metric(y_true, y_pred):
-        return kl_loss_var
+    for batch_id in range(n_training_batch):
+        print('Training batch', batch_id)
 
-    xent_loss_weight = K.variable(params['xent_loss_weight'])
-    model_train_targets = {'x_pred':X_train,
-                'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
-    model_test_targets = {'x_pred':X_test,
-        'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
 
-    AE_only_model.compile(loss=model_losses,
-        loss_weights=[xent_loss_weight,
-          kl_loss_var],
-        optimizer=optim,
-        metrics={'x_pred': ['categorical_accuracy',vae_anneal_metric]}
+        # Batch data
+        if batch_id == n_training_batch - 1:
+            X_train = X_train_all[batch_id * batch_size:]
+            X_test = X_test_all[batch_id * int(batch_size / 10):]
+        else:
+            X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
+            X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
+
+
+        # if paired_output is True, make pairs of the input data
+        if params["paired_output"]:
+            X_train, X_test = make_pairs(X_train, X_test)
+
+
+        model_train_targets = {'x_pred':X_train,
+                    'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
+        model_test_targets = {'x_pred':X_test,
+            'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
+
+        keras_verbose = params['verbose_print']
+
+        AE_only_model.fit(
+            x=X_train, y=model_train_targets,
+            batch_size=params['batch_size'],
+            epochs=params['epochs'],
+            initial_epoch=params['prev_epochs'],
+            callbacks=callbacks,
+            verbose=keras_verbose,
+            validation_data=[ X_test, model_test_targets]
         )
-
-    keras_verbose = params['verbose_print']
-
-    AE_only_model.fit(X_train, model_train_targets,
-                    batch_size=params['batch_size'],
-                    epochs=params['epochs'],
-                    initial_epoch=params['prev_epochs'],
-                    callbacks=callbacks,
-                    verbose=keras_verbose,
-                    validation_data=[ X_test, model_test_targets]
-                    )
 
     encoder.save(params['encoder_weights_file'])
     decoder.save(params['decoder_weights_file'])
-    print('time of run : ', time.time() - start_time)
+    print('Time of run : ', time.time() - start_time)
     print('**FINISHED**')
     return
 
@@ -378,6 +431,42 @@ def main_property_run(params):
     print('**FINISHED**')
 
     return
+
+
+# Function to take two inputs, a train set and a test set of np.arrays of 3 dimensions, and return the pairwise version of the train set and test set.
+# For the pairwise train set, the function will find all the permutation pairs of the input train set, and each pair will be represented by the concatenation of the input sample i and input sample j.
+# For example, if the input train set is of shape (2, 1, 3), the output train set will be of shape (2*2, 2, 3).
+# Say the input training sample is [[[1,2,3]], [[4,5,6]]].
+# The pairs in the output training set will be [[1,2,3], [4,5,6]], [[1,2,3], [1,2,3]], [[4,5,6], [1,2,3]], [[4,5,6], [4,5,6]].
+# For the pairwise test set, the function will find the combinatorial pairs of the input test set, and each pair will be represented by the concatenation of the input train sample i and input test sample j.
+# For example, if the input train set is of shape (2, 1, 3) and the input test set is of shape (3, 1, 3), the output test set will be of shape (3*2*2, 2, 3).
+# Say the input train set is [[[1,2,3]], [[4,5,6]]], and the input test set is [[[7,8,9]], [[10,11,12]],[[13,14,15]]].
+# The pairs in the output test set will be [[1,2,3], [7,8,9]], [[1,2,3], [10,11,12]], [[1,2,3], [13,14,15]], [[4,5,6], [7,8,9]], [[4,5,6], [10,11,12]], [[4,5,6], [13,14,15]], and their reverse pairs ([[7,8,9],[1,2,3]], [[10,11,12],[1,2,3]], [[13,14,15],[1,2,3]], [[7,8,9],[4,5,6]], [[10,11,12],[4,5,6]], [[13,14,15],[4,5,6]]).
+# Input type: np.array
+# Output type: np.array
+
+def make_pairs(train_set: np.array, test_set: np.array):
+    train_set_size, train_set_length, train_set_dim= train_set.shape
+    test_set_size, test_set_length, test_set_dim = test_set.shape
+
+    train_set_pairs = np.zeros((
+        train_set_size * train_set_size, 2*train_set_length, train_set_dim
+    ))
+    test_set_pairs = np.zeros((
+        train_set_size * test_set_size * 2, 2*test_set_length, test_set_dim
+    ))
+
+    for i in range(train_set_size):
+        for j in range(train_set_size):
+            train_set_pairs[i * train_set_size + j] = np.concatenate((train_set[i], train_set[j]), axis=0)
+    for i in range(test_set_size):
+        for j in range(train_set_size):
+            test_set_pairs[i * train_set_size * 2 + j] = np.concatenate((train_set[j], test_set[i]), axis=0)
+            test_set_pairs[i * train_set_size * 2 + train_set_size + j] = np.concatenate((test_set[i], train_set[j]), axis=0)
+
+    return train_set_pairs, test_set_pairs
+
+
 
 
 if __name__ == "__main__":
