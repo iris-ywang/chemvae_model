@@ -5,7 +5,7 @@
   "char_file": "../models/zinc/zinc.json",
   "encoder_weights_file": "../models/zinc/zinc_encoder.h5",
   "decoder_weights_file": "../models/zinc/zinc_decoder.h5",
-  "test_idx_file": "test_idx.npy",
+  "test_idx_file": "../models/zinc/test_idx.npy",
   "history_file": "../models/zinc/history.csv",
   "checkpoint_path": "./",
   "do_prop_pred": false,

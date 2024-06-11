@@ -12,6 +12,8 @@ encoder and decoder portions of the network
 # os.environ['CUDA_VISIBLE_DEVICES'] = '{}'.format(gpu_free_number)
 
 import argparse
+from datetime import datetime
+
 import numpy as np
 import tensorflow as tf
 config = tf.compat.v1.ConfigProto()
@@ -33,6 +35,7 @@ from chemvae.models import property_predictor_model, load_property_predictor
 from chemvae.models import variational_layers
 from functools import partial
 from keras.layers import Lambda
+import logging
 
 
 
@@ -44,6 +47,8 @@ def vectorize_data(params, n_samples=None):
     #             if no prop tasks : Y_train = []
 
     MAX_LEN = params['MAX_LEN']
+    if params["paired_output"]:
+        MAX_LEN = int(MAX_LEN / 2)
 
     CHARS = yaml.safe_load(open(params['char_file']))
     params['NCHARS'] = len(CHARS)
@@ -85,15 +90,15 @@ def vectorize_data(params, n_samples=None):
             if "logit_prop_tasks" in params:
                 Y_logit =  Y_logit[sample_idx]
 
-    print('Training set size is', len(smiles))
-    print('first smiles: \"', smiles[0], '\"')
-    print('total chars:', NCHARS)
+    logging.info(f'Training set size is {len(smiles)}')
+    logging.info(f'first smiles: {smiles[0]}')
+    logging.info(f'total chars: {NCHARS}')
 
-    print('Vectorization...')
+    logging.info('Vectorization...')
     X = mu.smiles_to_hot(smiles, MAX_LEN, params[
                              'PADDING'], CHAR_INDICES, NCHARS)
 
-    print('Total Data size', X.shape[0])
+    logging.info(f'Total Data size {X.shape[0]}')
     if np.shape(X)[0] % params['batch_size'] != 0:
         X = X[:np.shape(X)[0] // params['batch_size']
               * params['batch_size']]
@@ -122,8 +127,8 @@ def vectorize_data(params, n_samples=None):
         np.save(params['test_idx_file'], test_idx)
 
     X_train, X_test = X[train_idx], X[test_idx]
-    print('shape of input vector : {}', np.shape(X_train))
-    print('Training set size is {}, after filtering to max length of {}'.format(
+    logging.info(f'shape of input vector : {np.shape(X_train)}')
+    logging.info('Training set size is {}, after filtering to max length of {}'.format(
         np.shape(X_train), MAX_LEN))
 
     if params['do_prop_pred']:
@@ -171,13 +176,13 @@ def load_models(params):
     else:
         x_out = decoder(z_samp)
 
-    x_out = Lambda(identity, name='x_pred')(x_out)
-
     if params['paired_output']:
         # Add the "swap_halves" operation on x_out to the model.
         # This is done to make the model output the same as the input,
         # but with the first half of the input swapped with the second half.
-        x_out = Lambda(swap_halves, name='x_pred_swapped')(x_out)
+        x_out = Lambda(swap_halves, name='x_pred')(x_out)
+    else:
+        x_out = Lambda(identity, name='x_pred')(x_out)
 
     model_outputs = [x_out, z_mean_log_var_output]
 
@@ -233,7 +238,7 @@ def load_models(params):
 # Output type: keras.engine.keras_tensor.KerasTensor
 
 def swap_halves(x: tf.Tensor):
-    dim_a = x.shape[0]
+    dim_a = x.shape[1]
     half_dim_a = dim_a // 2
     return tf.concat([x[half_dim_a:], x[:half_dim_a]], axis=0)
 
@@ -241,7 +246,7 @@ def swap_halves(x: tf.Tensor):
 
 def kl_loss(truth_dummy, x_mean_log_var_output):
     x_mean, x_log_var = tf.split(x_mean_log_var_output, 2, axis=1)
-    print('x_mean shape in kl_loss: ', x_mean.get_shape())
+    logging.info(f'x_mean shape in kl_loss: {x_mean.get_shape()}')
     kl_loss = - 0.5 * \
         K.mean(1 + x_log_var - K.square(x_mean) -
               K.exp(x_log_var), axis=-1)
@@ -297,8 +302,7 @@ def main_no_prop(params):
         n_training_batch = int(params["data_size"] // batch_size)
 
     for batch_id in range(n_training_batch):
-        print('Training batch', batch_id)
-
+        logging.info(f'Training batch: {batch_id}')
 
         # Batch data
         if batch_id == n_training_batch - 1:
@@ -308,11 +312,10 @@ def main_no_prop(params):
             X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
             X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
 
-
         # if paired_output is True, make pairs of the input data
         if params["paired_output"]:
             X_train, X_test = make_pairs(X_train, X_test)
-
+        logging.info(f"Size of training and test size: {X_train.shape}, {X_test.shape}")
 
         model_train_targets = {'x_pred':X_train,
                     'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
@@ -331,10 +334,13 @@ def main_no_prop(params):
             validation_data=[ X_test, model_test_targets]
         )
 
-    encoder.save(params['encoder_weights_file'])
-    decoder.save(params['decoder_weights_file'])
-    print('Time of run : ', time.time() - start_time)
-    print('**FINISHED**')
+        logging.info(f"Finished training batch {batch_id}. "
+                     f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
+                     f"Saving weights...")
+        encoder.save(params['encoder_weights_file'])
+        decoder.save(params['decoder_weights_file'])
+    logging.info(f'Time of run : {time.time() - start_time}')
+    logging.info('**FINISHED**')
     return
 
 def main_property_run(params):
@@ -427,8 +433,8 @@ def main_property_run(params):
     decoder.save(params['decoder_weights_file'])
     property_predictor.save(params['prop_pred_weights_file'])
 
-    print('time of run : ', time.time() - start_time)
-    print('**FINISHED**')
+    logging.info(f'time of run : {time.time() - start_time}')
+    logging.info('**FINISHED**')
 
     return
 
@@ -476,13 +482,16 @@ if __name__ == "__main__":
     # parser.add_argument('-d', '--directory',
     #                     help='exp directory', default=None)
     # args = vars(parser.parse_args())
+    logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
 
     params = hyperparameters.load_params(args['exp_file'])
-    print("All params:", params)
+    logging.info(f"All params: {params}")
 
     if params['do_prop_pred'] :
         main_property_run(params)

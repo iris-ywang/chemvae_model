@@ -5,7 +5,7 @@
   "char_file": "../models/zinc_paired_model/zinc_paired.json",
   "encoder_weights_file": "../models/zinc_paired_model/zinc_paired_encoder.h5",
   "decoder_weights_file": "../models/zinc_paired_model/zinc_paired_decoder.h5",
-  "test_idx_file": "test_idx.npy",
+  "test_idx_file": "../models/zinc_paired_model/test_idx.npy",
   "history_file": "../models/zinc_paired_model/history.csv",
   "checkpoint_path": "./",
   "do_prop_pred": false,
@@ -25,5 +25,7 @@
   "hg_growth_factor": 1.2281884874932403,
   "middle_layer": 1,
   "momentum": 0.97170900638688007,
-  "paired_output": true
+  "paired_output": true,
+  "data_size": 12600,
+  "training_batch_size": 252
 }

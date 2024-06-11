@@ -14,7 +14,10 @@ class VAEUtils(object):
                  exp_file='exp.json',
                  encoder_file=None,
                  decoder_file=None,
-                 directory=None):
+                 directory=None,
+                 if_load_decoder=True,
+                 test_idx_file=None,
+                 ):
         # files
         if directory is not None:
             curdir = os.getcwd()
@@ -35,7 +38,8 @@ class VAEUtils(object):
         self.indices_char = dict((i, c) for i, c in enumerate(chars))
         # encoder, decoder
         self.enc = load_encoder(self.params)
-        self.dec = load_decoder(self.params)
+        if if_load_decoder:
+            self.dec = load_decoder(self.params)
         self.encode, self.decode = self.enc_dec_functions()
         self.data = None
         if self.params['do_prop_pred']:
@@ -46,19 +50,29 @@ class VAEUtils(object):
         df.iloc[:, 0] = df.iloc[:, 0].str.strip()
         df = df[df.iloc[:, 0].str.len() <= self.params['MAX_LEN']]
         self.smiles = df.iloc[:, 0].tolist()
+        self.reg_tasks = df.iloc[:, 1:]
+        print("Available regression tasks: ", self.reg_tasks.columns)
         if df.shape[1] > 1:
             self.data = df.iloc[:, 1:]
 
-        self.estimate_estandarization()
+        if test_idx_file is not None:
+            self.test_idxs = np.load(test_idx_file).astype(int)
+        else:
+            self.test_idxs = None
+
+        self.estimate_estandarization(self.test_idxs)
         if directory is not None:
             os.chdir(curdir)
         return
 
-    def estimate_estandarization(self):
+    def estimate_estandarization(self, test_idxs=None):
         print('Standarization: estimating mu and std values ...', end='')
         # sample Z space
-
-        smiles = self.random_molecules(size=50000)
+        if test_idxs is None:
+            smiles = self.random_molecules(size=50000)
+        else:
+            print("Encoding latent rep for test set...")
+            smiles = [self.smiles[i] for i in test_idxs]
         batch = 2500
         Z = np.zeros((len(smiles), self.params['hidden_dim']))
         for chunk in self.chunks(list(range(len(smiles))), batch):
@@ -70,7 +84,7 @@ class VAEUtils(object):
         self.std = np.std(Z, axis=0)
         self.Z = self.standardize_z(Z)
 
-        print('done!')
+        print('Finished encoding!')
         return
 
     def standardize_z(self, z):
