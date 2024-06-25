@@ -17,6 +17,7 @@ def load_params(param_file=None, verbose=True):
         # data parameters
         "data_size": None,              # number of molecules in the dataset
         "training_batch_size": 1260,
+        "batch_id": None,
 
         # for starting model from a checkpoint
         'reload_model': False,

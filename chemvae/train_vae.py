@@ -302,6 +302,12 @@ def main_no_prop(params):
         n_training_batch = int(params["data_size"] // batch_size)
 
     for batch_id in range(n_training_batch):
+        if params["batch_id"] is not None:
+            batch_start_id = int(params["batch_id"])
+            if batch_id < batch_start_id:
+                logging.info(f'\n Skipping Batch {batch_id} as the start '
+                             f'batch_id is specified at {batch_start_id} \n ')
+                continue
         logging.info(f'Training batch: {batch_id}')
 
         # Batch data
@@ -334,7 +340,7 @@ def main_no_prop(params):
             validation_data=[ X_test, model_test_targets]
         )
 
-        logging.info(f"Finished training batch {batch_id}. "
+        logging.info(f"\n \n \n \n \n Finished training batch {batch_id}. "
                      f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
                      f"Saving weights...")
         encoder.save(params['encoder_weights_file'])
