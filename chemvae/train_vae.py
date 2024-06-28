@@ -300,6 +300,7 @@ def main_no_prop(params):
     else:
         batch_size = params["training_batch_size"]
         n_training_batch = int(params["data_size"] // batch_size)
+    logging.info(f'Number of training batches: {n_training_batch}')
 
     for batch_id in range(n_training_batch):
         if params["batch_id"] is not None:
@@ -314,9 +315,13 @@ def main_no_prop(params):
         if batch_id == n_training_batch - 1:
             X_train = X_train_all[batch_id * batch_size:]
             X_test = X_test_all[batch_id * int(batch_size / 10):]
+            logging.info(f"Training batch index is from {batch_id * batch_size} to {len(X_train_all)} \n"
+                         f"Test batch index is from {batch_id * int(batch_size / 10)} to {len(X_test_all)}")
         else:
             X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
             X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
+            logging.info(f"Training batch index is from {batch_id * batch_size} to {(batch_id + 1) * batch_size} \n"
+                         f"Test batch index is from {batch_id * int(batch_size / 10)} to {(batch_id + 1) * int(batch_size / 10)}")
 
         # if paired_output is True, make pairs of the input data
         if params["paired_output"]:
@@ -340,7 +345,7 @@ def main_no_prop(params):
             validation_data=[ X_test, model_test_targets]
         )
 
-        logging.info(f"\n \n \n \n \n Finished training batch {batch_id}. "
+        logging.info(f"\n \n \n \n \n Note: Finished training batch {batch_id}. "
                      f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
                      f"Saving weights...")
         encoder.save(params['encoder_weights_file'])
