@@ -28,5 +28,6 @@
   "paired_output": true,
   "data_size": 12600,
   "training_batch_size": 252,
-  "reload_model": true
+  "reload_model": true,
+  "batch_id": 1
 }
