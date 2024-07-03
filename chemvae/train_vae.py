@@ -22,6 +22,7 @@ config.gpu_options.allow_growth = True
 import yaml
 import time
 import os
+import logging
 from keras import backend as K
 from keras.models import Model
 from keras.optimizers import SGD, Adam, RMSprop
@@ -35,8 +36,14 @@ from chemvae.models import property_predictor_model, load_property_predictor
 from chemvae.models import variational_layers
 from functools import partial
 from keras.layers import Lambda
-import logging
 
+# # Enable memory growth
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# for gpu in gpus:
+#     tf.config.experimental.set_memory_growth(gpu, True)
+#
+# # Set environment variable for memory allocator
+# os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
 
 def vectorize_data(params, n_samples=None):
@@ -243,7 +250,6 @@ def swap_halves(x: tf.Tensor):
     return tf.concat([x[half_dim_a:], x[:half_dim_a]], axis=0)
 
 
-
 def kl_loss(truth_dummy, x_mean_log_var_output):
     x_mean, x_log_var = tf.split(x_mean_log_var_output, 2, axis=1)
     logging.info(f'x_mean shape in kl_loss: {x_mean.get_shape()}')
@@ -251,6 +257,55 @@ def kl_loss(truth_dummy, x_mean_log_var_output):
         K.mean(1 + x_log_var - K.square(x_mean) -
               K.exp(x_log_var), axis=-1)
     return kl_loss
+
+
+def run_single_batch(
+        AE_only_model, encoder, decoder,
+        params,
+        X_train_all, X_test_all,
+        batch_id, n_training_batch, batch_size,
+        callbacks
+):
+    # Batch data
+    if batch_id == n_training_batch - 1:
+        X_train = X_train_all[batch_id * batch_size:]
+        X_test = X_test_all[batch_id * int(batch_size / 10):]
+        logging.info(f"Training batch index is from {batch_id * batch_size} to {len(X_train_all)} \n"
+                     f"Test batch index is from {batch_id * int(batch_size / 10)} to {len(X_test_all)}")
+    else:
+        X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
+        X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
+        logging.info(f"Training batch index is from {batch_id * batch_size} to {(batch_id + 1) * batch_size} \n"
+                     f"Test batch index is from {batch_id * int(batch_size / 10)} to {(batch_id + 1) * int(batch_size / 10)}")
+
+    # if paired_output is True, make pairs of the input data
+    if params["paired_output"]:
+        X_train, X_test = make_pairs(X_train, X_test)
+    logging.info(f"Size of training and test size: {X_train.shape}, {X_test.shape}")
+
+    model_train_targets = {'x_pred':X_train,
+                'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
+    model_test_targets = {'x_pred':X_test,
+        'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
+
+    keras_verbose = params['verbose_print']
+
+    AE_only_model.fit(
+        x=X_train, y=model_train_targets,
+        batch_size=params['batch_size'],
+        epochs=params['epochs'],
+        initial_epoch=params['prev_epochs'],
+        callbacks=callbacks,
+        verbose=keras_verbose,
+        validation_data=[X_test, model_test_targets]
+    )
+
+    logging.info(f"\n \n \n \n \n Note: Finished training batch {batch_id}. "
+                 f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
+                 f"Saving weights...")
+    encoder.save(params['encoder_weights_file'])
+    decoder.save(params['decoder_weights_file'])
+    return AE_only_model
 
 
 def main_no_prop(params):
@@ -310,49 +365,18 @@ def main_no_prop(params):
                              f'batch_id is specified at {batch_start_id} \n ')
                 continue
         logging.info(f'Training batch: {batch_id}')
-
-        # Batch data
-        if batch_id == n_training_batch - 1:
-            X_train = X_train_all[batch_id * batch_size:]
-            X_test = X_test_all[batch_id * int(batch_size / 10):]
-            logging.info(f"Training batch index is from {batch_id * batch_size} to {len(X_train_all)} \n"
-                         f"Test batch index is from {batch_id * int(batch_size / 10)} to {len(X_test_all)}")
-        else:
-            X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
-            X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
-            logging.info(f"Training batch index is from {batch_id * batch_size} to {(batch_id + 1) * batch_size} \n"
-                         f"Test batch index is from {batch_id * int(batch_size / 10)} to {(batch_id + 1) * int(batch_size / 10)}")
-
-        # if paired_output is True, make pairs of the input data
-        if params["paired_output"]:
-            X_train, X_test = make_pairs(X_train, X_test)
-        logging.info(f"Size of training and test size: {X_train.shape}, {X_test.shape}")
-
-        model_train_targets = {'x_pred':X_train,
-                    'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
-        model_test_targets = {'x_pred':X_test,
-            'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
-
-        keras_verbose = params['verbose_print']
-
-        AE_only_model.fit(
-            x=X_train, y=model_train_targets,
-            batch_size=params['batch_size'],
-            epochs=params['epochs'],
-            initial_epoch=params['prev_epochs'],
-            callbacks=callbacks,
-            verbose=keras_verbose,
-            validation_data=[ X_test, model_test_targets]
+        AE_only_model = run_single_batch(
+            AE_only_model, encoder, decoder,
+            params,
+            X_train_all, X_test_all,
+            batch_id, n_training_batch, batch_size,
+            callbacks
         )
 
-        logging.info(f"\n \n \n \n \n Note: Finished training batch {batch_id}. "
-                     f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
-                     f"Saving weights...")
-        encoder.save(params['encoder_weights_file'])
-        decoder.save(params['decoder_weights_file'])
     logging.info(f'Time of run : {time.time() - start_time}')
     logging.info('**FINISHED**')
     return
+
 
 def main_property_run(params):
     start_time = time.time()
