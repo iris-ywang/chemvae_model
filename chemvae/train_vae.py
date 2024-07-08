@@ -22,6 +22,7 @@ config.gpu_options.allow_growth = True
 import yaml
 import time
 import os
+import gc
 import logging
 from keras import backend as K
 from keras.models import Model
@@ -305,6 +306,9 @@ def run_single_batch(
                  f"Saving weights...")
     encoder.save(params['encoder_weights_file'])
     decoder.save(params['decoder_weights_file'])
+    del X_train
+    del X_test
+    gc.collect()
     return AE_only_model
 
 
