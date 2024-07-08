@@ -86,7 +86,7 @@ def vectorize_data(params, n_samples=None):
 
     ## Load data if no properties
     else:
-        smiles = mu.load_smiles_and_data_df(params['data_file'], MAX_LEN)[:1260]
+        smiles = mu.load_smiles_and_data_df(params['data_file'], MAX_LEN)
 
     if 'limit_data' in params.keys():
         sample_idx = np.random.choice(np.arange(len(smiles)), params['limit_data'], replace=False)
