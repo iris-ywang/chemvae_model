@@ -161,7 +161,7 @@ def vectorize_data(params, n_samples=None):
 def load_models(params):
 
     def identity(x):
-        return K.identity(x)
+        return tf.identity(x)
 
     # def K_params with kl_loss_var
     kl_loss_var = K.variable(params['kl_loss_weight'])
