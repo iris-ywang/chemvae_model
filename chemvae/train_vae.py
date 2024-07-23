@@ -306,6 +306,10 @@ def run_single_batch(
                  f"Saving weights...")
     encoder.save(params['encoder_weights_file'])
     decoder.save(params['decoder_weights_file'])
+
+    encoder.save(params['encoder_weights_file'][-3:] + f'_{(batch_id + 1) * batch_size}.h5')
+    decoder.save(params['decoder_weights_file'][-3:] + f'_{(batch_id + 1) * batch_size}.h5')
+
     del X_train
     del X_test
     gc.collect()
