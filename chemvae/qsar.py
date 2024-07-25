@@ -87,11 +87,12 @@ def pairwise_differences_for_standard_approach(
 #     return [rho, mse, mae, r2, np.nan, np.nan]
 
 
-def vae_qsar_sa(qsar_size = 200, logp_task = "logP"):
+def vae_qsar_sa(qsar_size=200, logp_task="logP", encoder_file=None):
     vae_sa = VAEUtils(
         exp_file='../models/zinc/exp.json',
         if_load_decoder=False,
         test_idx_file='../models/zinc/test_idx.npy',
+        encoder_file=encoder_file,
     )
 
     Z_sa = vae_sa.Z[-qsar_size:]  # the last [qsar_size] molecules of latent space representation for the test set
@@ -232,14 +233,19 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP"):
 
     return metrics
 
-if __name__ == '__main__':
-    logp_task = "logP"
-    qsar_size = 1000
-    metrics_filename = "sa_12600_23072024.npy"
 
-    metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task)
+def main(model_train_size=12600, encoder_file=None):
+    logp_task = "logP"
+    qsar_size = 4500
+    metrics_filename = f"sa_model_iris2_{model_train_size}_testsize_{qsar_size}.npy"
+
+    metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
     np.save(f"../models/zinc/{metrics_filename}", metrics_sa)
     # metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task)
     # np.save([metrics_sa, metrics_pa], f"/qsar_outputs/{metrics_filename}")
-    print("haha")
+    print("")
+    return metrics_sa
 
+
+if __name__ == '__main__':
+    main(model_train_size=12600)
