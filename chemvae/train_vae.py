@@ -307,8 +307,8 @@ def run_single_batch(
     encoder.save(params['encoder_weights_file'])
     decoder.save(params['decoder_weights_file'])
 
-    encoder.save(params['encoder_weights_file'][-3:] + f'_{(batch_id + 1) * batch_size}.h5')
-    decoder.save(params['decoder_weights_file'][-3:] + f'_{(batch_id + 1) * batch_size}.h5')
+    encoder.save(params['encoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
+    decoder.save(params['decoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
 
     del X_train
     del X_test
@@ -527,8 +527,8 @@ if __name__ == "__main__":
     # args = vars(parser.parse_args())
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
-    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
 
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
