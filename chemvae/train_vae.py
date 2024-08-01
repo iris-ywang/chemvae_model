@@ -37,6 +37,7 @@ from chemvae.models import property_predictor_model, load_property_predictor
 from chemvae.models import variational_layers
 from functools import partial
 from keras.layers import Lambda
+from chemvae.qsar import testing_encoder
 
 # # Enable memory growth
 # gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -291,6 +292,19 @@ def run_single_batch(
 
     keras_verbose = params['verbose_print']
 
+    if np.isnan(X_train).any():
+        logging.warning("\n!!!!!!! \n"
+                        "NaN values in training data \n"
+                        "!!!!!!!\n")
+    else:
+        logging.info("No NaN values in training data")
+    if np.isnan(X_test).any():
+        logging.warning("\n!!!!!!!\n"
+                        "NaN values in test data\n"
+                        "!!!!!!!\n")
+    else:
+        logging.info("No NaN values in test data")
+
     AE_only_model.fit(
         x=X_train, y=model_train_targets,
         batch_size=params['batch_size'],
@@ -310,6 +324,7 @@ def run_single_batch(
     encoder.save(params['encoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
     decoder.save(params['decoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
 
+    testing_encoder(params['encoder_weights_file'], X_test)
     del X_train
     del X_test
     gc.collect()
@@ -527,8 +542,8 @@ if __name__ == "__main__":
     # args = vars(parser.parse_args())
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    # args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
-    args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
 
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])

@@ -1,6 +1,8 @@
 # from os import environ
 # environ['KERAS_BACKEND'] = 'tensorflow'
 # vae stuff
+import logging
+
 from chemvae.vae_utils import VAEUtils
 import numpy as np
 from functools import partial
@@ -9,10 +11,10 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 from pairwise_formulation.pa_basics.import_data import kfold_splits
-from pairwise_formulation.pa_basics.all_pairs import pair_by_pair_id_per_feature
 from pairwise_formulation.pairwise_data import PairwiseDataInfo
 from pairwise_formulation.pairwise_model import build_ml_model, PairwiseRegModel
-from chemvae import mol_utils as mu
+from keras.models import load_model
+
 # # import scientific py
 # # rdkit stuff
 # from rdkit.Chem import AllChem as Chem
@@ -85,6 +87,27 @@ def pairwise_differences_for_standard_approach(
 #     mae = mean_absolute_error(y_true, y_predict)
 #     r2 = r2_score(y_true, y_predict)
 #     return [rho, mse, mae, r2, np.nan, np.nan]
+
+
+def testing_encoder(encoder_path, X_test):
+    encoder = load_model(encoder_path)
+    logging.info("Checking weights in the encoder model")
+    if np.isnan(encoder.get_weights()[0]).any() or np.isnan(encoder.get_weights()[-1]).any():
+        logging.warning("\n !!!-There are NaN values in the encoder model weights \n")
+        error_in_weights = True
+    Z_test_single = encoder.predict(X_test[0])[0]
+    if np.isnan(Z_test_single).any():
+        logging.warning("\n !!!-There are NaN values in the single encoder model prediction \n")
+        error_in_prediction = True
+    Z_test = encoder.predict(X_test[:50])[0]
+    if np.isnan(Z_test).any():
+        logging.warning("\n !!!-There are NaN values in the batch encoder model predictions \n")
+        error_in_prediction = True
+
+    if error_in_weights or error_in_prediction:
+        logging.warning("\n !!!!!!!!! "
+                        "There are NaN values in the encoder model \n"
+                        "!!!!!!!!!\n")
 
 
 def vae_qsar_sa(qsar_size=200, logp_task="logP", encoder_file=None):
@@ -164,11 +187,12 @@ def get_encoder_pairwise_Z(pairwise_encoder, data, pair_ids, smile_length, n_cha
     return np.array(all_pairs)
 
 
-def vae_qsar_pa(qsar_size=200, logp_task="logP"):
+def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
     vae_pa = VAEUtils(
         exp_file='../models/zinc_paired_model/exp.json',
         if_load_decoder=False,
         test_idx_file='../models/zinc/test_idx.npy',
+        encoder_file=encoder_file,
     )
 
     one_hot = vae_pa.Z[-qsar_size:]  # the last [qsar_size] molecules of ONE-HOT of SMILES for the test set
@@ -244,8 +268,9 @@ def main(model_train_size=12600, encoder_file=None):
     # metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task)
     # np.save([metrics_sa, metrics_pa], f"/qsar_outputs/{metrics_filename}")
     print("")
-    return metrics_sa
+    return
 
 
 if __name__ == '__main__':
-    main(model_train_size=12600)
+    main(model_train_size='pa', encoder_file="../models/zinc_paired_model/zinc_paired_encoder_12600.h5")
+    # main(model_train_size='downloaded', encoder_file="../models/zinc/zinc_encoder.h5")
