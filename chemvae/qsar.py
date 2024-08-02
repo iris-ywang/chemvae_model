@@ -97,7 +97,6 @@ def testing_encoder(encoder_path, X_test):
         error_in_weights = True
     else:
         error_in_weights = False
-        print(encoder.get_weights())
     Z_test_single = encoder.predict(X_test[0:1])[0]
     if np.isnan(Z_test_single).any():
         logging.warning("\n !!!-There are NaN values in the single encoder model prediction \n")
@@ -111,7 +110,6 @@ def testing_encoder(encoder_path, X_test):
         error_in_prediction = True
     else:
         error_in_prediction = False
-        print(Z_test)
 
     if error_in_weights or error_in_prediction:
         logging.warning("\n !!!!!!!!! "
