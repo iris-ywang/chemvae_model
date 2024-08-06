@@ -91,7 +91,7 @@ class VAEUtils(object):
             one_hot = self.smiles_to_hot(sub_smiles)
             if self.params["paired_output"]:
                 # TODO: Check flatten and reshape error
-                Z[chunk, :] = one_hot.reshape((len(smiles), self.max_length * self.params['NCHARS']))
+                Z[chunk, :] = one_hot.reshape((len(sub_smiles), self.max_length * self.params['NCHARS']))
                 continue
             Z[chunk, :] = self.encode(one_hot, False)
 
