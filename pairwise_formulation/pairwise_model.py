@@ -43,15 +43,15 @@ class PairwiseRegModel():
 
         return self
 
-    def predict(self):
+    def predict(self, pairing_method=pair_by_pair_id_per_feature):
 
         if self.Y_values.Y_pa_c2_nume is None:
             self.Y_values.Y_pa_c2_nume_true, self.Y_values.Y_pa_c2_nume = \
-                self._fit_dist(self.pairwise_data_info.c2_test_pair_ids)
+                self._fit_dist(self.pairwise_data_info.c2_test_pair_ids, pairing_method)
 
         if self.Y_values.Y_pa_c3_nume is None:
             self.Y_values.Y_pa_c3_nume_true, self.Y_values.Y_pa_c3_nume = \
-                self._fit_dist(self.pairwise_data_info.c3_test_pair_ids)
+                self._fit_dist(self.pairwise_data_info.c3_test_pair_ids, pairing_method)
 
         return self.Y_values
 
@@ -88,7 +88,7 @@ class PairwiseRegModel():
     #     return y_ranking_score_all
 
 
-    def _fit_dist(self, test_pair_ids):
+    def _fit_dist(self, test_pair_ids, pairing_method=pair_by_pair_id_per_feature):
         number_test_batches = len(test_pair_ids) // self.batch_size
         if number_test_batches < 1: number_test_batches = 0
         Y_pa_dist = []
@@ -99,8 +99,10 @@ class PairwiseRegModel():
                                      test_batch * self.batch_size: (test_batch + 1) * self.batch_size]
             else:
                 test_pair_id_batch = test_pair_ids[test_batch * self.batch_size:]
-            test_pairs_batch = pair_by_pair_id_per_feature(data=self.pairwise_data_info.train_test,
-                                                           pair_ids=test_pair_id_batch)
+            test_pairs_batch = pairing_method(
+                data=self.pairwise_data_info.train_test,
+                pair_ids=test_pair_id_batch
+            )
             Y_pa_true += list(test_pairs_batch[:, 0])
             Y_pa_dist += list(self.trained_reg_model.predict(test_pairs_batch[:, 1:]))
             if (test_batch + 1) * self.batch_size >= len(test_pair_ids): break
