@@ -189,7 +189,7 @@ def get_encoder_pairwise_Z(pairwise_encoder, data, pair_ids, smile_length, n_cha
 
         pair_ab_one_hot = np.concatenate([sample_a, sample_b], axis=0)
         Z_pa = pairwise_encoder(pair_ab_one_hot.reshape(1, 2 * smile_length, n_chars))
-        y_Z_ab = np.concatenate([np.array([delta_y_ab]), Z_pa], axis=0)
+        y_Z_ab = np.concatenate((np.array([delta_y_ab]), Z_pa[0]), axis=0)
         all_pairs.append(y_Z_ab)
     return np.array(all_pairs)
 
@@ -233,12 +233,13 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
             batch_size=1000000,
             pairing_params=None
         ).fit()
-        Y_values = pa_model.predict()
+        Y_values = pa_model.predict(
+            pairing_method=pa_encoder_predictor
+        )
 
         # Evaluation
-        Y_c2_true, Y_c3_true = pairwise_differences_for_standard_approach(
-            y_pred_all=pairwise_data.y_true_all, pairwise_data_info=pairwise_data
-        )
+        Y_c2_true = Y_values.Y_pa_c2_nume_true
+        Y_c3_true = Y_values.Y_pa_c3_nume_true
         Y_c2_pa = Y_values.Y_pa_c2_nume
         Y_c3_pa = Y_values.Y_pa_c3_nume
 
@@ -267,17 +268,19 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
 
 def main(model_train_size=12600, encoder_file=None):
     logp_task = "logP"
-    qsar_size = 4500
-    metrics_filename = f"sa_model_iris2_{model_train_size}_testsize_{qsar_size}.npy"
+    qsar_size = 500
+    metrics_filename = f"pa_model_iris2_{str(model_train_size)}_testsize_{qsar_size}.npy"
 
-    metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
-    np.save(f"../models/zinc/{metrics_filename}", metrics_sa)
-    # metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task)
+    # metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
+    # np.save(f"../models/zinc/{metrics_filename}", metrics_sa)
+    metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
+    np.save(f"../models/zinc_paired_model/{metrics_filename}", metrics_pa)
+
     # np.save([metrics_sa, metrics_pa], f"/qsar_outputs/{metrics_filename}")
-    print("")
+    print("Finished!")
     return
 
 
 if __name__ == '__main__':
-    main(model_train_size='pa', encoder_file="../models/zinc_paired_model/zinc_paired_encoder_12600.h5")
+    main(model_train_size='1512', encoder_file="../models/zinc_paired_model/zinc_paired_encoder2_1512.h5")
     # main(model_train_size='downloaded', encoder_file="../models/zinc/zinc_encoder.h5")

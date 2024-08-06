@@ -27,6 +27,7 @@ class VAEUtils(object):
         # load parameters
         self.params = hyperparameters.load_params(exp_file, False)
         if encoder_file is not None:
+            print(f"Changing encoder file to: {encoder_file} \n")
             self.params["encoder_weights_file"] = encoder_file
         if decoder_file is not None:
             self.params["decoder_weights_file"] = decoder_file
@@ -82,6 +83,10 @@ class VAEUtils(object):
         if self.params["paired_output"]:
             Z = np.zeros((len(smiles), self.max_length * self.params['NCHARS']))
         for chunk in self.chunks(list(range(len(smiles))), batch):
+            # smiles_tr = list(set(self.smiles) - set(smiles))
+            # pair_1 = np.concatenate((one_hot[0], one_hot[1]), axis=0)
+            # pair_1 = np.reshape(pair_1, (1, pair_1.shape[0], pair_1.shape[1]))
+            # output = self.encode(pair_1, False)
             sub_smiles = [smiles[i] for i in chunk]
             one_hot = self.smiles_to_hot(sub_smiles)
             if self.params["paired_output"]:
@@ -91,7 +96,7 @@ class VAEUtils(object):
             Z[chunk, :] = self.encode(one_hot, False)
 
         if self.params["paired_output"]:
-            self.Z = Z
+            self.Z = Z.astype(one_hot.dtype)
             print('Paired output is True. No encoding performed. '
                   'VAEUtils.Z will be one-hot of smiles.')
             return
