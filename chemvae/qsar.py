@@ -179,18 +179,44 @@ def vae_qsar_sa(qsar_size=200, logp_task="logP", encoder_file=None):
     return metrics
 
 
-def get_encoder_pairwise_Z(pairwise_encoder, data, pair_ids, smile_length, n_chars):
+def get_encoder_pairwise_Z(
+        pairwise_encoder, data, pair_ids, smile_length, n_chars,
+        encoding_batch_size=500,
+):
     data = np.array(data)
     all_pairs = []
+
+    n_batch = (len(pair_ids) // encoding_batch_size)
+    if n_batch * encoding_batch_size < len(pair_ids):
+        n_batch += 1
+
+    one_hot_pairs = []
+    delta_y_pairs = []
+    n_pairs_compiled = 0
     for sample_id_a, sample_id_b in pair_ids:
         sample_a = np.reshape(data[sample_id_a, 1:], (smile_length, n_chars))
         sample_b = np.reshape(data[sample_id_b, 1:], (smile_length, n_chars))
         delta_y_ab = data[sample_id_a, 0] - data[sample_id_b, 0]
-
         pair_ab_one_hot = np.concatenate([sample_a, sample_b], axis=0)
-        Z_pa = pairwise_encoder(pair_ab_one_hot.reshape(1, 2 * smile_length, n_chars))
-        y_Z_ab = np.concatenate((np.array([delta_y_ab]), Z_pa[0]), axis=0)
+
+        one_hot_pairs.append(pair_ab_one_hot)
+        delta_y_pairs.append([delta_y_ab])
+        n_pairs_compiled += 1
+
+        if n_pairs_compiled == encoding_batch_size:
+            Z_pa = pairwise_encoder(np.array(one_hot_pairs))
+            y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
+            all_pairs.append(y_Z_ab)
+
+            one_hot_pairs = []
+            delta_y_pairs = []
+            n_pairs_compiled = 0
+
+    if n_pairs_compiled > 0:
+        Z_pa = pairwise_encoder(np.array(one_hot_pairs))
+        y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
         all_pairs.append(y_Z_ab)
+
     return np.array(all_pairs)
 
 
@@ -268,7 +294,7 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
 
 def main(model_train_size=12600, encoder_file=None):
     logp_task = "logP"
-    qsar_size = 500
+    qsar_size = 100
     metrics_filename = f"pa_model_iris2_{str(model_train_size)}_testsize_{qsar_size}.npy"
 
     # metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
