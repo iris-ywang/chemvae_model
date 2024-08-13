@@ -206,7 +206,7 @@ def get_encoder_pairwise_Z(
         if n_pairs_compiled == encoding_batch_size:
             Z_pa = pairwise_encoder(np.array(one_hot_pairs))
             y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
-            all_pairs.append(y_Z_ab)
+            all_pairs += y_Z_ab.tolist()
 
             one_hot_pairs = []
             delta_y_pairs = []
@@ -215,7 +215,7 @@ def get_encoder_pairwise_Z(
     if n_pairs_compiled > 0:
         Z_pa = pairwise_encoder(np.array(one_hot_pairs))
         y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
-        all_pairs.append(y_Z_ab)
+        all_pairs += y_Z_ab.tolist()
 
     return np.array(all_pairs)
 
@@ -256,7 +256,8 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
             ML_reg=ML_reg,
             pairing_method=pa_encoder_predictor,
             search_model=None,
-            batch_size=1000000,
+            test_batch_size=2000,
+            train_batch_size=5000,
             pairing_params=None
         ).fit()
         Y_values = pa_model.predict(
@@ -294,7 +295,7 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
 
 def main(model_train_size=12600, encoder_file=None):
     logp_task = "logP"
-    qsar_size = 100
+    qsar_size = 500
     metrics_filename = f"pa_model_iris2_{str(model_train_size)}_testsize_{qsar_size}.npy"
 
     # metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
