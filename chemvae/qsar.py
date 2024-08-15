@@ -217,6 +217,7 @@ def get_encoder_pairwise_Z(
         Z_pa = pairwise_encoder(np.array(one_hot_pairs))
         y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
         all_pairs += y_Z_ab.tolist()
+        logging.info(f"Last compile of {n_pairs_compiled} pairs")
 
     return np.array(all_pairs)
 
@@ -282,12 +283,12 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
 
         print(
             "\n Fold ID: ", fold_id,
-            f"\n MSE C2 SA: {mse_c2_pa}",
-            f"\n MSE C3 SA: {mse_c3_pa}",
-            f"\n MAE C2 SA: {mae_c2_pa}",
-            f"\n MAE C3 SA: {mae_c3_pa}",
-            f"\n R2 C2 SA: {r2_c2_pa}",
-            f"\n R2 C3 SA: {r2_c3_pa}"
+            f"\n MSE C2 PA: {mse_c2_pa}",
+            f"\n MSE C3 PA: {mse_c3_pa}",
+            f"\n MAE C2 PA: {mae_c2_pa}",
+            f"\n MAE C3 PA: {mae_c3_pa}",
+            f"\n R2 C2 PA: {r2_c2_pa}",
+            f"\n R2 C3 PA: {r2_c3_pa}"
         )
         metrics.append([mse_c2_pa, mse_c3_pa, mae_c2_pa, mae_c3_pa, r2_c2_pa, r2_c3_pa])
 
