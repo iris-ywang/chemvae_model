@@ -309,7 +309,7 @@ def main(model_train_size=12600, encoder_file=None):
 
     # np.save([metrics_sa, metrics_pa], f"/qsar_outputs/{metrics_filename}")
     print("Finished!")
-    return
+    return metrics_pa
 
 
 if __name__ == '__main__':
