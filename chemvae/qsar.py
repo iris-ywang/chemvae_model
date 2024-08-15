@@ -233,11 +233,11 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
     y = np.array(vae_pa.reg_tasks[logp_task])[-qsar_size:]
 
     train_test = np.concatenate([y.reshape(len(y), 1), one_hot], axis=1)
-    ML_reg = RandomForestRegressor(random_state=2, n_jobs=10)
     train_test_splits_dict = kfold_splits(train_test=train_test, fold=10)
 
     metrics = []
     for fold_id, foldwise_data in train_test_splits_dict.items():
+        ML_reg = RandomForestRegressor(random_state=2, n_jobs=10)
         train_set = foldwise_data['train_set']
         test_set = foldwise_data['test_set']
         pairwise_data = PairwiseDataInfo(
@@ -290,6 +290,8 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
             f"\n R2 C3 SA: {r2_c3_pa}"
         )
         metrics.append([mse_c2_pa, mse_c3_pa, mae_c2_pa, mae_c3_pa, r2_c2_pa, r2_c3_pa])
+
+        del ML_reg
 
     return metrics
 
