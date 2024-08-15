@@ -16,7 +16,16 @@ if __name__ == '__main__':
 
 
     metrics_for_all_models = []
+    res0 = np.load(f"../models/zinc_paired_model/pa_model_iris2_252_testsize_500.npy")
+    print(f"Loaded results from pa_model_iris2_252_testsize_500.npy "
+          f"in shape {res0.shape}. Average metrics: {res0} \n")
+    metrics0 = [-1, 252] + list(res0)
+    metrics_for_all_models.append(metrics0)
+
+
     for model_id in models_ids:
+        if model_id in [252]:
+            continue
         encoder_weights_file = f"../models/zinc_paired_model/zinc_paired_encoder2_{model_id}.h5"
         metrics = main(model_train_size=model_id, encoder_file=encoder_weights_file)
         res = np.average(np.array(metrics), axis=0)
