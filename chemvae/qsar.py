@@ -181,7 +181,7 @@ def vae_qsar_sa(qsar_size=200, logp_task="logP", encoder_file=None):
 
 def get_encoder_pairwise_Z(
         pairwise_encoder, data, pair_ids, smile_length, n_chars,
-        encoding_batch_size=500,
+        encoding_batch_size=5000,
 ):
     data = np.array(data)
     all_pairs = []
@@ -207,6 +207,7 @@ def get_encoder_pairwise_Z(
             Z_pa = pairwise_encoder(np.array(one_hot_pairs))
             y_Z_ab = np.concatenate((np.array(delta_y_pairs), Z_pa), axis=1)
             all_pairs += y_Z_ab.tolist()
+            logging.info(f"Compiled {n_pairs_compiled} pairs")
 
             one_hot_pairs = []
             delta_y_pairs = []
