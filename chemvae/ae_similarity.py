@@ -24,7 +24,7 @@ def vae_similarity(
     X = vae_sa.smiles_for_encoding[-size:]
     Xoh = vae_sa.smiles_one_hot_for_encoding[-size:]
     Z = vae_sa.Z[-size:]
-    Xoh_r = vae_sa.decode(Z, standardize=False)
+    Xoh_r = vae_sa.decode(Z, standardise=False)
     X_r = vae_sa.one_hot_to_smiles(Xoh_r)
 
     mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
