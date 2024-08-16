@@ -80,6 +80,9 @@ class VAEUtils(object):
             smiles = [self.smiles[i] for i in test_idxs]
         batch = 2500
         Z = np.zeros((len(smiles), self.params['hidden_dim']))
+        self.smiles_for_encoding = smiles
+        self.smiles_one_hot_for_encoding = self.smiles_to_hot(smiles)
+
         if self.params["paired_output"]:
             Z = np.zeros((len(smiles), self.max_length * self.params['NCHARS']))
         for chunk in self.chunks(list(range(len(smiles))), batch):
