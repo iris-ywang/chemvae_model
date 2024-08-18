@@ -2,7 +2,8 @@ import logging
 
 from chemvae.vae_utils import VAEUtils
 import numpy as np
-from rdkit.Chem import rdFingerprintGenerator
+# from rdkit.Chem import rdFingerprintGenerator, MolFromSmiles
+# from rdkit import DataStructs
 from sklearn.metrics import jaccard_score
 
 def vae_similarity(
@@ -27,9 +28,7 @@ def vae_similarity(
     Xoh_r = vae_sa.decode(Z, standardized=False)
     X_r = vae_sa.hot_to_smiles(Xoh_r)
 
-    mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
-    fp = mfpgen.GetFingerprint(X)
-    fp_r = mfpgen.GetFingerprint(X_r)
+    # mfpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
 
     for i in range(size):
 
@@ -37,11 +36,15 @@ def vae_similarity(
         print("Original smiles     :", X[i])
         print("Reconstructed smiles:", X_r[i])
 
-        metrics_oh = jaccard_score(Xoh[i], Xoh_r[i], average='micro')
-        metrics_fp = jaccard_score(fp[i], fp_r[i])
+        metrics_oh = jaccard_score(np.round(Xoh[i]), np.round(Xoh_r[i]), average='micro')
+
+        # fp_i = mfpgen.GetFingerprint(MolFromSmiles(X[i]))
+        # fp_r_i = mfpgen.GetFingerprint(MolFromSmiles(X_r[i]))
+        # metrics_fp = DataStructs.TanimotoSimilarity(fp_i, fp_r_i)
+
         print(f"Similarity (one-hot): {metrics_oh}")
-        print(f"Similarity (fingerprint): {metrics_fp}")
-        metrics.append([metrics_oh, metrics_fp])
+        # print(f"Similarity (fingerprint): {metrics_fp}")
+        metrics.append(metrics_oh)
 
     return metrics
 
@@ -49,7 +52,7 @@ def vae_similarity(
 def main():
     # user parameters
     size = 100
-    model_train_size = 12600
+    model_train_size = 126000
     base_path = '../models/zinc/'
     test_idx_file_path = '../models/zinc/test_idx.npy'
     encoder_file = base_path + f'zinc_encoder_iris2_{model_train_size}.h5'
