@@ -95,8 +95,15 @@ def vae_pa_similarity(
 
 
             if i % 10 == 0:
+                print(f"For molecule {a} and its repeated decoded subsample...")
+                print("Original smiles     :", X[a])
+                print("Reconstructed smiles:", vae_pa.hot_to_smiles(np.round(Xoh_r_a)))
                 print(f"Calculating similarity score for molecule {a} "
-                      f"and {i}th decoded molecule {a} from pairs: {metrics_oh_a}")
+                      f"and {i}th decoded molecule {a} from pairs: {metrics_oh_a} \n")
+
+                print(f"For molecule {i} and its occurence as decoded subsample...")
+                print("Original smiles     :", X[i])
+                print("Reconstructed smiles:", vae_pa.hot_to_smiles(np.round(Xoh_r_x)))
                 print(f"Calculating similarity score for molecule {i} "
                       f"and decoded molecule {i} from pairs: {metrics_oh_x}")
 
@@ -135,7 +142,7 @@ def main_sa():
 def main_pa():
     # user parameters
     size = 100
-    model_train_size = 12600
+    model_train_size = 1512
     base_path = '../models/zinc_paired_model/'
     test_idx_file_path = '../models/zinc/test_idx.npy'
     encoder_file = base_path + f'zinc_paired_encoder2_{model_train_size}.h5'
