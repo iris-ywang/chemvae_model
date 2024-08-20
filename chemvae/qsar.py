@@ -300,16 +300,16 @@ def vae_qsar_pa(qsar_size=200, logp_task="logP", encoder_file=None):
 def main(model_train_size=12600, encoder_file=None):
     logp_task = "logP"
     qsar_size = 500
-    metrics_filename = f"pa_model_iris2_{str(model_train_size)}_testsize_{qsar_size}.npy"
+    metrics_filename = f"sa_model_iris2_{model_train_size}_testsize_{qsar_size}.npy"
 
-    # metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
-    # np.save(f"../models/zinc/{metrics_filename}", metrics_sa)
-    metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
-    np.save(f"../models/zinc_paired_model/{metrics_filename}", metrics_pa)
+    metrics_sa = vae_qsar_sa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
+    np.save(f"../models/zinc/{metrics_filename}", metrics_sa)
+    # metrics_pa = vae_qsar_pa(qsar_size=qsar_size, logp_task=logp_task, encoder_file=encoder_file)
+    # np.save(f"../models/zinc_paired_model/{metrics_filename}", metrics_pa)
 
     # np.save([metrics_sa, metrics_pa], f"/qsar_outputs/{metrics_filename}")
     print("Finished!")
-    return metrics_pa
+    return metrics_sa
 
 
 if __name__ == '__main__':
