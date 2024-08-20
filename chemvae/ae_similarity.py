@@ -142,7 +142,7 @@ def main_sa():
 def main_pa():
     # user parameters
     size = 100
-    model_train_size = 1512
+    model_train_size = 12600
     base_path = '../models/zinc_paired_model/'
     test_idx_file_path = '../models/zinc/test_idx.npy'
     encoder_file = base_path + f'zinc_paired_encoder2_{model_train_size}.h5'
