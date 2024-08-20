@@ -36,6 +36,6 @@ if __name__ == '__main__':
         metrics_for_all_models.append(metrics)
         print(f"Model {model_id} done.")
     np.save(
-        f"../models/zinc_paired_model/averaged_metrics_for_zinc_paired_encoder2_{model_id[0]}_to_{model_id[-1]}.npy",
+        f"../models/zinc_paired_model/averaged_metrics_for_zinc_paired_encoder2_{models_ids[0]}_to_{models_ids[-1]}.npy",
         metrics_for_all_models
     )
