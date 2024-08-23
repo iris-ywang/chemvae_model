@@ -2,9 +2,9 @@ import logging
 
 from chemvae.vae_utils import VAEUtils
 import numpy as np
-from functools import partial
 
 from sklearn.metrics import jaccard_score
+
 
 def vae_sa_similarity(
         size=200,
@@ -34,7 +34,7 @@ def vae_sa_similarity(
         print("Original smiles     :", X[i])
         print("Reconstructed smiles:", X_r[i])
 
-        metrics_oh = jaccard_score(np.round(Xoh[i]), np.round(Xoh_r[i]), average='micro')
+        metrics_oh = jaccard_score(Xoh[i], one_hot_via_max_prob(Xoh_r[i]), average='micro')
 
         print(f"Similarity (one-hot): {metrics_oh}")
         metrics.append(metrics_oh)
@@ -86,24 +86,24 @@ def vae_pa_similarity(
         print(f"Calculating average similarity for molecule {a}.")
         for i in range(size):
             Xoh_r_a = Xoh_r_as[i]
-            metrics_oh_a = jaccard_score(np.round(Xoh[a]), np.round(Xoh_r_a), average='micro')
+            metrics_oh_a = jaccard_score(one_hot_via_max_prob(Xoh[a]), one_hot_via_max_prob(Xoh_r_a), average='micro')
             metrics_dict[a].append(metrics_oh_a)
 
             Xoh_r_x = Xoh_r_xs[i]
-            metrics_oh_x = jaccard_score(np.round(Xoh[i]), np.round(Xoh_r_x), average='micro')
+            metrics_oh_x = jaccard_score(one_hot_via_max_prob(Xoh[i]), one_hot_via_max_prob(Xoh_r_x), average='micro')
             metrics_dict[i].append(metrics_oh_x)
 
 
             if i % 10 == 0:
                 print(f"For molecule {a} and its repeated decoded subsample...")
                 print("Original smiles     :", X[a])
-                print("Reconstructed smiles:", vae_pa.hot_to_smiles(np.round(Xoh_r_a)))
+                print("Reconstructed smiles:", vae_pa.hot_to_smiles(one_hot_via_max_prob(Xoh_r_a)))
                 print(f"Calculating similarity score for molecule {a} "
                       f"and {i}th decoded molecule {a} from pairs: {metrics_oh_a} \n")
 
                 print(f"For molecule {i} and its occurence as decoded subsample...")
                 print("Original smiles     :", X[i])
-                print("Reconstructed smiles:", vae_pa.hot_to_smiles(np.round(Xoh_r_x)))
+                print("Reconstructed smiles:", vae_pa.hot_to_smiles(one_hot_via_max_prob(Xoh_r_x)))
                 print(f"Calculating similarity score for molecule {i} "
                       f"and decoded molecule {i} from pairs: {metrics_oh_x}")
 
@@ -112,6 +112,13 @@ def vae_pa_similarity(
         metrics.append(np.mean(l))
 
     return metrics
+
+
+# Write a function that takes a 2D numpy array. Return a numpy array of the same
+# shape, but each row (axis=1) has its maximum value set to 1, and all other
+# values set to 0.
+def one_hot_via_max_prob(arr: np.array):
+    return np.where(arr == np.max(arr, axis=1)[:, None], 1, 0)
 
 
 def main_sa():
@@ -166,5 +173,5 @@ def main_pa():
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-    # main_sa()
-    main_pa()
+    main_sa()
+    # main_pa()
