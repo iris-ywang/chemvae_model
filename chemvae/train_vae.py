@@ -344,7 +344,7 @@ def main_no_prop(params):
 
     # compile models
     if params['optim'] == 'adam':
-        optim = Adam(lr=params['lr'], beta_1=params['momentum'], clipnorm=1.0)
+        optim = Adam(lr=params['lr'], beta_1=params['momentum'], clipnorm=0.1)
     elif params['optim'] == 'rmsprop':
         optim = RMSprop(lr=params['lr'], rho=params['momentum'])
     elif params['optim'] == 'sgd':

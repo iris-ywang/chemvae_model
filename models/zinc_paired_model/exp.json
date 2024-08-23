@@ -26,8 +26,8 @@
   "middle_layer": 1,
   "momentum": 0.97170900638688007,
   "paired_output": true,
-  "data_size": 12600,
+  "data_size": 37800,
   "training_batch_size": 252,
-  "reload_model": false,
-  "batch_id": 0
+  "reload_model": true,
+  "batch_id": 83
 }
