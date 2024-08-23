@@ -12,6 +12,8 @@ encoder and decoder portions of the network
 # os.environ['CUDA_VISIBLE_DEVICES'] = '{}'.format(gpu_free_number)
 
 import argparse
+from datetime import datetime
+
 import numpy as np
 import tensorflow as tf
 config = tf.compat.v1.ConfigProto()
@@ -20,6 +22,8 @@ config.gpu_options.allow_growth = True
 import yaml
 import time
 import os
+import gc
+import logging
 from keras import backend as K
 from keras.models import Model
 from keras.optimizers import SGD, Adam, RMSprop
@@ -33,10 +37,18 @@ from chemvae.models import property_predictor_model, load_property_predictor
 from chemvae.models import variational_layers
 from functools import partial
 from keras.layers import Lambda
+from chemvae.qsar import testing_encoder
+
+# # Enable memory growth
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# for gpu in gpus:
+#     tf.config.experimental.set_memory_growth(gpu, True)
+#
+# # Set environment variable for memory allocator
+# os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
 
-
-def vectorize_data(params):
+def vectorize_data(params, n_samples=None):
     # @out : Y_train /Y_test : each is list of datasets.
     #        i.e. if reg_tasks only : Y_train_reg = Y_train[0]
     #             if logit_tasks only : Y_train_logit = Y_train[0]
@@ -44,6 +56,8 @@ def vectorize_data(params):
     #             if no prop tasks : Y_train = []
 
     MAX_LEN = params['MAX_LEN']
+    if params["paired_output"]:
+        MAX_LEN = int(MAX_LEN / 2)
 
     CHARS = yaml.safe_load(open(params['char_file']))
     params['NCHARS'] = len(CHARS)
@@ -85,15 +99,15 @@ def vectorize_data(params):
             if "logit_prop_tasks" in params:
                 Y_logit =  Y_logit[sample_idx]
 
-    print('Training set size is', len(smiles))
-    print('first smiles: \"', smiles[0], '\"')
-    print('total chars:', NCHARS)
+    logging.info(f'Training set size is {len(smiles)}')
+    logging.info(f'first smiles: {smiles[0]}')
+    logging.info(f'total chars: {NCHARS}')
 
-    print('Vectorization...')
+    logging.info('Vectorization...')
     X = mu.smiles_to_hot(smiles, MAX_LEN, params[
                              'PADDING'], CHAR_INDICES, NCHARS)
 
-    print('Total Data size', X.shape[0])
+    logging.info(f'Total Data size {X.shape[0]}')
     if np.shape(X)[0] % params['batch_size'] != 0:
         X = X[:np.shape(X)[0] // params['batch_size']
               * params['batch_size']]
@@ -122,8 +136,8 @@ def vectorize_data(params):
         np.save(params['test_idx_file'], test_idx)
 
     X_train, X_test = X[train_idx], X[test_idx]
-    print('shape of input vector : {}', np.shape(X_train))
-    print('Training set size is {}, after filtering to max length of {}'.format(
+    logging.info(f'shape of input vector : {np.shape(X_train)}')
+    logging.info('Training set size is {}, after filtering to max length of {}'.format(
         np.shape(X_train), MAX_LEN))
 
     if params['do_prop_pred']:
@@ -148,7 +162,7 @@ def vectorize_data(params):
 def load_models(params):
 
     def identity(x):
-        return K.identity(x)
+        return tf.identity(x)
 
     # def K_params with kl_loss_var
     kl_loss_var = K.variable(params['kl_loss_weight'])
@@ -171,7 +185,14 @@ def load_models(params):
     else:
         x_out = decoder(z_samp)
 
-    x_out = Lambda(identity, name='x_pred')(x_out)
+    if params['paired_output']:
+        # Add the "swap_halves" operation on x_out to the model.
+        # This is done to make the model output the same as the input,
+        # but with the first half of the input swapped with the second half.
+        x_out = Lambda(swap_halves, name='x_pred')(x_out)
+    else:
+        x_out = Lambda(identity, name='x_pred')(x_out)
+
     model_outputs = [x_out, z_mean_log_var_output]
 
     AE_only_model = Model(x_in, model_outputs)
@@ -213,24 +234,117 @@ def load_models(params):
         return AE_only_model, encoder, decoder, kl_loss_var
 
 
+# Function to take in a KerasTensor of shape (dim_a, dim_b) and
+# return a tensor of the same shape, but the first half in dim_a
+# swaps position with the second half. For example, if the input
+# keras tensor is in shape (10,3), the output tensor will be of
+# shape (10,3) but the first 5 rows will be swapped with the
+# last 5 rows. So if you have
+# [[1,2,3,4,5], [10,20,30,40,50], [6,7,8,9,10], [60,70,80,90,100]],
+# the output will be
+# [[6,7,8,9,10], [60,70,80,90,100], [1,2,3,4,5], [10,20,30,40,50]].
+# Input tye: keras.engine.keras_tensor.KerasTensor
+# Output type: keras.engine.keras_tensor.KerasTensor
+
+def swap_halves(x: tf.Tensor):
+    dim_a = x.shape[1]
+    half_dim_a = dim_a // 2
+    return tf.concat([x[half_dim_a:], x[:half_dim_a]], axis=0)
+
+
 def kl_loss(truth_dummy, x_mean_log_var_output):
     x_mean, x_log_var = tf.split(x_mean_log_var_output, 2, axis=1)
-    print('x_mean shape in kl_loss: ', x_mean.get_shape())
+    logging.info(f'x_mean shape in kl_loss: {x_mean.get_shape()}')
     kl_loss = - 0.5 * \
         K.mean(1 + x_log_var - K.square(x_mean) -
               K.exp(x_log_var), axis=-1)
     return kl_loss
 
 
+def run_single_batch(
+        AE_only_model, encoder, decoder,
+        params,
+        X_train_all, X_test_all,
+        batch_id, n_training_batch, batch_size,
+        callbacks
+):
+    # Batch data
+    if batch_id == n_training_batch - 1:
+        X_train = X_train_all[batch_id * batch_size:]
+        X_test = X_test_all[batch_id * int(batch_size / 10):]
+        logging.info(f"Training batch index is from {batch_id * batch_size} to {len(X_train_all)} \n"
+                     f"Test batch index is from {batch_id * int(batch_size / 10)} to {len(X_test_all)}")
+    else:
+        X_train = X_train_all[batch_id * batch_size:(batch_id + 1) * batch_size]
+        X_test = X_test_all[batch_id * int(batch_size / 10):(batch_id + 1) * int(batch_size / 10)]
+        logging.info(f"Training batch index is from {batch_id * batch_size} to {(batch_id + 1) * batch_size} \n"
+                     f"Test batch index is from {batch_id * int(batch_size / 10)} to {(batch_id + 1) * int(batch_size / 10)}")
+
+    # if paired_output is True, make pairs of the input data
+    if params["paired_output"]:
+        X_train, X_test = make_pairs(X_train, X_test)
+    logging.info(f"Size of training and test size: {X_train.shape}, {X_test.shape}")
+
+    model_train_targets = {'x_pred':X_train,
+                'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
+    model_test_targets = {'x_pred':X_test,
+        'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
+
+    keras_verbose = params['verbose_print']
+
+    if np.isnan(X_train).any():
+        logging.warning("\n!!!!!!! \n"
+                        "NaN values in training data \n"
+                        "!!!!!!!\n")
+    else:
+        logging.info("No NaN values in training data")
+    if np.isnan(X_test).any():
+        logging.warning("\n!!!!!!!\n"
+                        "NaN values in test data\n"
+                        "!!!!!!!\n")
+    else:
+        logging.info("No NaN values in test data")
+
+    AE_only_model.fit(
+        x=X_train, y=model_train_targets,
+        batch_size=params['batch_size'],
+        epochs=params['epochs'],
+        initial_epoch=params['prev_epochs'],
+        callbacks=callbacks,
+        verbose=keras_verbose,
+        validation_data=[X_test, model_test_targets]
+    )
+
+    logging.info(f"\n \n \n \n \n Note: Finished training batch {batch_id}. "
+                 f"Current time: {datetime.today().strftime('%H_%M_%S__%d_%m_%Y')}."
+                 f"Saving weights...")
+    encoder.save(params['encoder_weights_file'])
+    decoder.save(params['decoder_weights_file'])
+
+    encoder.save(params['encoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
+    decoder.save(params['decoder_weights_file'][:-3] + f'_{(batch_id + 1) * batch_size}.h5')
+
+    testing_encoder(params['encoder_weights_file'], X_test)
+    del X_train
+    del X_test
+    gc.collect()
+    return AE_only_model
+
+
 def main_no_prop(params):
+
+    def vae_anneal_metric(y_true, y_pred):
+        return kl_loss_var
+
+
     start_time = time.time()
 
-    X_train, X_test = vectorize_data(params)
+    X_train_all, X_test_all = vectorize_data(params)
     AE_only_model, encoder, decoder, kl_loss_var = load_models(params)
 
     # compile models
     if params['optim'] == 'adam':
-        optim = Adam(lr=params['lr'], beta_1=params['momentum'])
+        optim = Adam(lr=params['lr'], beta_1=params['momentum'], clipnorm=0.1)
     elif params['optim'] == 'rmsprop':
         optim = RMSprop(lr=params['lr'], rho=params['momentum'])
     elif params['optim'] == 'sgd':
@@ -240,6 +354,13 @@ def main_no_prop(params):
 
     model_losses = {'x_pred': params['loss'],
                         'z_mean_log_var': kl_loss}
+    xent_loss_weight = K.variable(params['xent_loss_weight'])
+    AE_only_model.compile(
+        loss=model_losses,
+        loss_weights=[xent_loss_weight, kl_loss_var],
+        optimizer=optim,
+        metrics={'x_pred': ['categorical_accuracy', vae_anneal_metric]}
+    )
 
     # vae metrics, callbacks
     vae_sig_schedule = partial(mol_cb.sigmoid_schedule, slope=params['anneal_sigmod_slope'],
@@ -250,39 +371,35 @@ def main_no_prop(params):
     csv_clb = CSVLogger(params["history_file"], append=False)
     callbacks = [ vae_anneal_callback, csv_clb]
 
+    # Load data
+    if params["data_size"] is None:
+        batch_size = len(X_train_all)
+        n_training_batch = 1
+    else:
+        batch_size = params["training_batch_size"]
+        n_training_batch = int(params["data_size"] // batch_size)
+    logging.info(f'Number of training batches: {n_training_batch}')
 
-    def vae_anneal_metric(y_true, y_pred):
-        return kl_loss_var
-
-    xent_loss_weight = K.variable(params['xent_loss_weight'])
-    model_train_targets = {'x_pred':X_train,
-                'z_mean_log_var':np.ones((np.shape(X_train)[0], params['hidden_dim'] * 2))}
-    model_test_targets = {'x_pred':X_test,
-        'z_mean_log_var':np.ones((np.shape(X_test)[0], params['hidden_dim'] * 2))}
-
-    AE_only_model.compile(loss=model_losses,
-        loss_weights=[xent_loss_weight,
-          kl_loss_var],
-        optimizer=optim,
-        metrics={'x_pred': ['categorical_accuracy',vae_anneal_metric]}
+    for batch_id in range(n_training_batch):
+        if params["batch_id"] is not None:
+            batch_start_id = int(params["batch_id"])
+            if batch_id < batch_start_id:
+                logging.info(f'\n Skipping Batch {batch_id} as the start '
+                             f'batch_id is specified at {batch_start_id} \n ')
+                continue
+        logging.info(f'Training batch: {batch_id}')
+        AE_only_model = run_single_batch(
+            AE_only_model, encoder, decoder,
+            params,
+            X_train_all, X_test_all,
+            batch_id, n_training_batch, batch_size,
+            callbacks
         )
 
-    keras_verbose = params['verbose_print']
-
-    AE_only_model.fit(X_train, model_train_targets,
-                    batch_size=params['batch_size'],
-                    epochs=params['epochs'],
-                    initial_epoch=params['prev_epochs'],
-                    callbacks=callbacks,
-                    verbose=keras_verbose,
-                    validation_data=[ X_test, model_test_targets]
-                    )
-
-    encoder.save(params['encoder_weights_file'])
-    decoder.save(params['decoder_weights_file'])
-    print('time of run : ', time.time() - start_time)
-    print('**FINISHED**')
+    logging.info(f'Time of run : {time.time() - start_time}')
+    logging.info('**FINISHED**')
     return
+
 
 def main_property_run(params):
     start_time = time.time()
@@ -374,10 +491,46 @@ def main_property_run(params):
     decoder.save(params['decoder_weights_file'])
     property_predictor.save(params['prop_pred_weights_file'])
 
-    print('time of run : ', time.time() - start_time)
-    print('**FINISHED**')
+    logging.info(f'time of run : {time.time() - start_time}')
+    logging.info('**FINISHED**')
 
     return
+
+
+# Function to take two inputs, a train set and a test set of np.arrays of 3 dimensions, and return the pairwise version of the train set and test set.
+# For the pairwise train set, the function will find all the permutation pairs of the input train set, and each pair will be represented by the concatenation of the input sample i and input sample j.
+# For example, if the input train set is of shape (2, 1, 3), the output train set will be of shape (2*2, 2, 3).
+# Say the input training sample is [[[1,2,3]], [[4,5,6]]].
+# The pairs in the output training set will be [[1,2,3], [4,5,6]], [[1,2,3], [1,2,3]], [[4,5,6], [1,2,3]], [[4,5,6], [4,5,6]].
+# For the pairwise test set, the function will find the combinatorial pairs of the input test set, and each pair will be represented by the concatenation of the input train sample i and input test sample j.
+# For example, if the input train set is of shape (2, 1, 3) and the input test set is of shape (3, 1, 3), the output test set will be of shape (3*2*2, 2, 3).
+# Say the input train set is [[[1,2,3]], [[4,5,6]]], and the input test set is [[[7,8,9]], [[10,11,12]],[[13,14,15]]].
+# The pairs in the output test set will be [[1,2,3], [7,8,9]], [[1,2,3], [10,11,12]], [[1,2,3], [13,14,15]], [[4,5,6], [7,8,9]], [[4,5,6], [10,11,12]], [[4,5,6], [13,14,15]], and their reverse pairs ([[7,8,9],[1,2,3]], [[10,11,12],[1,2,3]], [[13,14,15],[1,2,3]], [[7,8,9],[4,5,6]], [[10,11,12],[4,5,6]], [[13,14,15],[4,5,6]]).
+# Input type: np.array
+# Output type: np.array
+
+def make_pairs(train_set: np.array, test_set: np.array):
+    train_set_size, train_set_length, train_set_dim= train_set.shape
+    test_set_size, test_set_length, test_set_dim = test_set.shape
+
+    train_set_pairs = np.zeros((
+        train_set_size * train_set_size, 2*train_set_length, train_set_dim
+    ))
+    test_set_pairs = np.zeros((
+        train_set_size * test_set_size * 2, 2*test_set_length, test_set_dim
+    ))
+
+    for i in range(train_set_size):
+        for j in range(train_set_size):
+            train_set_pairs[i * train_set_size + j] = np.concatenate((train_set[i], train_set[j]), axis=0)
+    for i in range(test_set_size):
+        for j in range(train_set_size):
+            test_set_pairs[i * train_set_size * 2 + j] = np.concatenate((train_set[j], test_set[i]), axis=0)
+            test_set_pairs[i * train_set_size * 2 + train_set_size + j] = np.concatenate((test_set[i], train_set[j]), axis=0)
+
+    return train_set_pairs, test_set_pairs
+
+
 
 
 if __name__ == "__main__":
@@ -387,13 +540,16 @@ if __name__ == "__main__":
     # parser.add_argument('-d', '--directory',
     #                     help='exp directory', default=None)
     # args = vars(parser.parse_args())
+    logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
 
     params = hyperparameters.load_params(args['exp_file'])
-    print("All params:", params)
+    logging.info(f"All params: {params}")
 
     if params['do_prop_pred'] :
         main_property_run(params)
