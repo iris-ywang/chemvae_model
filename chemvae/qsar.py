@@ -1,6 +1,4 @@
-# from os import environ
-# environ['KERAS_BACKEND'] = 'tensorflow'
-# vae stuff
+
 import logging
 
 from chemvae.vae_utils import VAEUtils
@@ -14,15 +12,6 @@ from pairwise_formulation.pa_basics.import_data import kfold_splits
 from pairwise_formulation.pairwise_data import PairwiseDataInfo
 from pairwise_formulation.pairwise_model import build_ml_model, PairwiseRegModel
 from keras.models import load_model
-
-# # import scientific py
-# # rdkit stuff
-# from rdkit.Chem import AllChem as Chem
-# from rdkit.Chem import PandasTools
-# # plotting stuff
-# import matplotlib.pyplot as plt
-# import matplotlib as mpl
-# from IPython.display import SVG, display
 
 
 def estimate_y_from_averaging(Y_pa_c2, c2_test_pair_ids, test_ids, y_true, Y_weighted=None):
