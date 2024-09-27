@@ -13,7 +13,7 @@ encoder and decoder portions of the network
 
 import argparse
 from datetime import datetime
-
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 config = tf.compat.v1.ConfigProto()
@@ -46,6 +46,45 @@ from chemvae.qsar import testing_encoder
 #
 # # Set environment variable for memory allocator
 # os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
+
+
+def vectorize_data_chembl(params, n_samples=None):
+
+    # For Morgan FP, MAX_LEN = 1024.
+    MAX_LEN = params['MAX_LEN']
+    if params["paired_output"]:
+        MAX_LEN = int(MAX_LEN / 2)
+
+    chembl_data = pd.read_csv(params['data_file'])
+    logging.info(f'Training set size is {len(chembl_data)}')
+    params['NCHARS'] = 1
+
+    X = chembl_data.iloc[:, 2:].to_numpy()
+
+    # Shuffle the data
+    np.random.seed(params['RAND_SEED'])
+    rand_idx = np.arange(np.shape(X)[0])
+    np.random.shuffle(rand_idx)
+
+    # Set aside the validation set
+    TRAIN_FRAC = 1 - params['val_split']
+    num_train = int(X.shape[0] * TRAIN_FRAC)
+
+    if num_train % params['batch_size'] != 0:
+        num_train = num_train // params['batch_size'] * \
+            params['batch_size']
+
+    train_idx, test_idx = rand_idx[: int(num_train)], rand_idx[int(num_train):]
+
+    if 'test_idx_file' in params.keys():
+        np.save(params['test_idx_file'], test_idx)
+
+    X_train, X_test = X[train_idx], X[test_idx]
+    logging.info(f'shape of input vector : {np.shape(X_train)}')
+    logging.info('Training set size is {}, after filtering to max length of {}'.format(
+        np.shape(X_train), MAX_LEN))
+
+    return X_train, X_test
 
 
 def vectorize_data(params, n_samples=None):
@@ -186,10 +225,18 @@ def load_models(params):
         x_out = decoder(z_samp)
 
     if params['paired_output']:
+        # Method 1: original pair
+        x_out = Lambda(identity, name='x_pred')(x_out)
+
+        # Method 2: swapped pair element
         # Add the "swap_halves" operation on x_out to the model.
         # This is done to make the model output the same as the input,
         # but with the first half of the input swapped with the second half.
-        x_out = Lambda(swap_halves, name='x_pred')(x_out)
+        # x_out = Lambda(swap_halves, name='x_pred')(x_out)
+
+        # Method 3: interleave bits of the pair
+        # x_out = Lambda(interleave_halves, name='x_pred')(x_out)
+
     else:
         x_out = Lambda(identity, name='x_pred')(x_out)
 
@@ -206,7 +253,7 @@ def load_models(params):
         if (('reg_prop_tasks' in params) and (len(params['reg_prop_tasks']) > 0 ) and
                 ('logit_prop_tasks' in params) and (len(params['logit_prop_tasks']) > 0 )):
 
-            reg_prop_pred, logit_prop_pred   = property_predictor(z_mean)
+            reg_prop_pred, logit_prop_pred = property_predictor(z_mean)
             reg_prop_pred = Lambda(identity, name='reg_prop_pred')(reg_prop_pred)
             logit_prop_pred = Lambda(identity, name='logit_prop_pred')(logit_prop_pred)
             model_outputs.extend([reg_prop_pred,  logit_prop_pred])
@@ -250,6 +297,24 @@ def swap_halves(x: tf.Tensor):
     dim_a = x.shape[1]
     half_dim_a = dim_a // 2
     return tf.concat([x[half_dim_a:], x[:half_dim_a]], axis=0)
+
+
+def interleave_halves(x: tf.Tensor):
+    """Function to take in a KerasTensor of shape (dim_a, n) and
+    return a tensor of that double the length of shape (2*dim_a, n),
+    but with their elements intersected.
+
+    For example, if the input keras tensor has its first half being
+    [[1,2,3,4]] and the second half being [[10, 20, 30, 40]], the
+    output will be [[1, 10, 2, 20, 3, 30, 4, 40]]."""
+    dim_a = x.shape[1]
+    half_dim_a = int(dim_a // 2)
+    x_a = x[:, :half_dim_a]
+    x_b = x[:, half_dim_a:]
+    stacked = tf.stack([x_a, x_b], axis=2)
+
+    interleaved_pair = tf.reshape(stacked, [tf.shape(x_a)[0], -1])
+    return interleaved_pair
 
 
 def kl_loss(truth_dummy, x_mean_log_var_output):
@@ -339,12 +404,12 @@ def main_no_prop(params):
 
     start_time = time.time()
 
-    X_train_all, X_test_all = vectorize_data(params)
+    X_train_all, X_test_all = vectorize_data_chembl(params)
     AE_only_model, encoder, decoder, kl_loss_var = load_models(params)
 
     # compile models
     if params['optim'] == 'adam':
-        optim = Adam(lr=params['lr'], beta_1=params['momentum'], clipnorm=0.1)
+        optim = Adam(lr=params['lr'], beta_1=params['momentum'])
     elif params['optim'] == 'rmsprop':
         optim = RMSprop(lr=params['lr'], rho=params['momentum'])
     elif params['optim'] == 'sgd':
@@ -363,8 +428,11 @@ def main_no_prop(params):
     )
 
     # vae metrics, callbacks
-    vae_sig_schedule = partial(mol_cb.sigmoid_schedule, slope=params['anneal_sigmod_slope'],
-                               start=params['vae_annealer_start'])
+    vae_sig_schedule = partial(
+        mol_cb.sigmoid_schedule,
+        slope=params['anneal_sigmod_slope'],
+        start=params['vae_annealer_start']
+    )
     vae_anneal_callback = mol_cb.WeightAnnealer_epoch(
             vae_sig_schedule, kl_loss_var, params['kl_loss_weight'], 'vae' )
 
@@ -542,8 +610,8 @@ if __name__ == "__main__":
     # args = vars(parser.parse_args())
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
-    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    args = {'exp_file': '../models/chembl/exp.json', 'directory': None}
 
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
@@ -551,7 +619,4 @@ if __name__ == "__main__":
     params = hyperparameters.load_params(args['exp_file'])
     logging.info(f"All params: {params}")
 
-    if params['do_prop_pred'] :
-        main_property_run(params)
-    else:
-        main_no_prop(params)
+    main_no_prop(params)
