@@ -18,7 +18,7 @@
   "dropout_rate_mid": 0.082832929704794792,
   "anneal_sigmod_slope": 0.51066543057913916,
   "recurrent_dim": 488,
-  "batch_size": 126,
+  "batch_size": 100,
   "lr": 0.00039192162392520126,
   "hidden_dim": 196,
   "tgru_dropout": 0.19617749608323892,
