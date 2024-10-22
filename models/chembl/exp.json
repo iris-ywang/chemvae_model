@@ -4,7 +4,7 @@
   "data_file": "../models/chembl/data_CHEMBL204.csv",
 
   "encoder_weights_file": "../models/chembl/chembl204_encoder.h5",
-  "decoder_weights_file": "../models/chembl/chembl204_encoder.h5",
+  "decoder_weights_file": "../models/chembl/chembl204_decoder.h5",
   "test_idx_file": "../models/chembl/test_idx.npy",
   "history_file": "../models/chembl/history.csv",
   "checkpoint_path": "./",
