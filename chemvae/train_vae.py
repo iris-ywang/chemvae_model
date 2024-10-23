@@ -23,18 +23,20 @@ import yaml
 import time
 import os
 import gc
-import logging
+import logging as lg
+
 from keras import backend as K
+from keras.callbacks import CSVLogger
 from keras.models import Model
 from keras.optimizers import SGD, Adam, RMSprop
 from chemvae import hyperparameters
 from chemvae import mol_utils as mu
 from chemvae import mol_callbacks as mol_cb
-from keras.callbacks import CSVLogger
 from chemvae.models import encoder_model, load_encoder
 from chemvae.models import decoder_model, load_decoder
 from chemvae.models import property_predictor_model, load_property_predictor
 from chemvae.models import variational_layers
+from chemvae.train_utils import GPUUsageCallback
 from functools import partial
 from keras.layers import Lambda
 from chemvae.qsar import testing_encoder
@@ -48,6 +50,44 @@ from chemvae.qsar import testing_encoder
 # os.environ['TF_GPU_ALLOCATOR'] = 'cuda_malloc_async'
 
 
+# Set up logging
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '3'
+
+ch = lg.StreamHandler()
+ch.setLevel(lg.DEBUG)
+formatter = lg.Formatter("%(asctime)s;%(levelname)s;%(message)s", "%Y-%m-%d %H:%M:%S")
+ch.setFormatter(formatter)
+
+logging = lg.getLogger("tensorflow")
+logging.addHandler(ch)
+
+
+# Set up GPU info
+logging.info(f"CUDA Version:  {tf.sysconfig.get_build_info()['cuda_version']}")
+logging.info(f"CUDNN Version:  {tf.sysconfig.get_build_info()['cudnn_version']}")
+
+# Check available GPUs
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    logging.info(f"GPUs available: {gpus} \n ")
+else:
+    logging.info("No GPU available! \n ")
+
+if gpus:
+    try:
+        # Set memory growth for each GPU (prevents TensorFlow from using all the GPU memory at once)
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+
+        # Make all GPUs visible to TensorFlow
+        tf.config.set_visible_devices(gpus, 'GPU')
+
+        logging.info(f"Using GPUs: {gpus} \n")
+    except RuntimeError as e:
+        logging.info(f"Error setting GPUs: {e}")
+
+
 def vectorize_data_chembl(params, n_samples=None):
 
     # For Morgan FP, MAX_LEN = 1024.
@@ -59,7 +99,7 @@ def vectorize_data_chembl(params, n_samples=None):
     logging.info(f'Training set size is {len(chembl_data)}')
     params['NCHARS'] = 1
 
-    X = chembl_data.iloc[:, 2:].to_numpy()
+    X = chembl_data.iloc[:, 2:].to_numpy(dtype=np.float32)
 
     # Shuffle the data
     np.random.seed(params['RAND_SEED'])
@@ -437,7 +477,9 @@ def main_no_prop(params):
             vae_sig_schedule, kl_loss_var, params['kl_loss_weight'], 'vae' )
 
     csv_clb = CSVLogger(params["history_file"], append=False)
-    callbacks = [ vae_anneal_callback, csv_clb]
+
+    gpu_usage_cb = GPUUsageCallback()
+    callbacks = [vae_anneal_callback, csv_clb, gpu_usage_cb]
 
     # Load data
     if params["data_size"] is None:
@@ -608,10 +650,12 @@ if __name__ == "__main__":
     # parser.add_argument('-d', '--directory',
     #                     help='exp directory', default=None)
     # args = vars(parser.parse_args())
-    logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    # args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
     args = {'exp_file': '../models/chembl/exp.json', 'directory': None}
+
+    # args = {'exp_file': '/home/yw453/chemvae_model/models/zinc/exp.json', 'directory': None}
+    # args = {'exp_file': '/home/yw453/chemvae_model/models/chembl/exp.json', 'directory': None}
 
     if args['directory'] is not None:
         args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
