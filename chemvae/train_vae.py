@@ -620,6 +620,10 @@ def main_property_run(params):
 # Output type: np.array
 
 def make_pairs(train_set: np.array, test_set: np.array):
+    if len(train_set.shape) == 2:
+        train_set = np.expand_dims(train_set, axis=2)
+        test_set = np.expand_dims(test_set, axis=2)
+
     train_set_size, train_set_length, train_set_dim= train_set.shape
     test_set_size, test_set_length, test_set_dim = test_set.shape
 
@@ -638,8 +642,11 @@ def make_pairs(train_set: np.array, test_set: np.array):
             test_set_pairs[i * train_set_size * 2 + j] = np.concatenate((train_set[j], test_set[i]), axis=0)
             test_set_pairs[i * train_set_size * 2 + train_set_size + j] = np.concatenate((test_set[i], train_set[j]), axis=0)
 
-    return train_set_pairs, test_set_pairs
+    if train_set_dim == 1.0:
+        train_set_pairs = np.squeeze(train_set_pairs, axis=2)
+        test_set_pairs = np.squeeze(test_set_pairs, axis=2)
 
+    return train_set_pairs, test_set_pairs
 
 
 
@@ -652,7 +659,7 @@ if __name__ == "__main__":
     # args = vars(parser.parse_args())
 
     # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
-    args = {'exp_file': '../models/chembl/exp.json', 'directory': None}
+    args = {'exp_file': '../models/chembl_paired/exp.json', 'directory': None}
 
     # args = {'exp_file': '/home/yw453/chemvae_model/models/zinc/exp.json', 'directory': None}
     # args = {'exp_file': '/home/yw453/chemvae_model/models/chembl/exp.json', 'directory': None}
