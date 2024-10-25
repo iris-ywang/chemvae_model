@@ -92,12 +92,13 @@ def vectorize_data_chembl(params, n_samples=None):
 
     # For Morgan FP, MAX_LEN = 1024.
     MAX_LEN = params['MAX_LEN']
-    if params["paired_output"]:
-        MAX_LEN = int(MAX_LEN / 2)
 
     chembl_data = pd.read_csv(params['data_file'])
     logging.info(f'Training set size is {len(chembl_data)}')
-    params['NCHARS'] = 1
+    if params["paired_output"]:
+        params['NCHARS'] = 2
+    else:
+        params['NCHARS'] = 1
 
     X = chembl_data.iloc[:, 2:].to_numpy(dtype=np.float32)
 
@@ -621,8 +622,9 @@ def main_property_run(params):
 
 def make_pairs(train_set: np.array, test_set: np.array):
     if len(train_set.shape) == 2:
-        train_set = np.expand_dims(train_set, axis=2)
-        test_set = np.expand_dims(test_set, axis=2)
+        train_set = np.expand_dims(train_set, axis=1)
+        test_set = np.expand_dims(test_set, axis=1)
+        extra_step = True
 
     train_set_size, train_set_length, train_set_dim= train_set.shape
     test_set_size, test_set_length, test_set_dim = test_set.shape
@@ -642,9 +644,9 @@ def make_pairs(train_set: np.array, test_set: np.array):
             test_set_pairs[i * train_set_size * 2 + j] = np.concatenate((train_set[j], test_set[i]), axis=0)
             test_set_pairs[i * train_set_size * 2 + train_set_size + j] = np.concatenate((test_set[i], train_set[j]), axis=0)
 
-    if train_set_dim == 1.0:
-        train_set_pairs = np.squeeze(train_set_pairs, axis=2)
-        test_set_pairs = np.squeeze(test_set_pairs, axis=2)
+    if extra_step == 1.0:
+        train_set_pairs = train_set_pairs.swapaxes(1, 2)
+        test_set_pairs = test_set_pairs.swapaxes(1, 2)
 
     return train_set_pairs, test_set_pairs
 

@@ -1,6 +1,6 @@
 {
   "name": "chembl204",
-  "MAX_LEN": 2048,
+  "MAX_LEN": 1024,
   "data_file": "../models/chembl/data_CHEMBL204.csv",
 
   "encoder_weights_file": "../models/chembl_paired/chembl204_pa_encoder.h5",
