@@ -8,7 +8,7 @@ from keras import backend as K
 from keras.models import Model
 from keras.layers import Concatenate
 from .tgru_k2_gpu import TerminalGRU
-
+import tensorflow as tf
 
 # =============================
 # Encoder functions
@@ -278,22 +278,19 @@ def property_predictor_model(params):
 def load_property_predictor(params):
     return load_model(params['prop_pred_weights_file'])
 
+
 class SamplingLayer(Layer):
     def __init__(self, params, **kwargs):
         super(SamplingLayer, self).__init__(**kwargs)
         self.params = params
 
-    def build(self, input_shape):
-        self.epsilon = self.add_weight(
-            shape=(self.params['batch_size'], self.params['hidden_dim']),
-            initializer='random_normal',
-            trainable=False,
-            name='epsilon'
-        )
-
     def call(self, inputs, training=None):
         z_mean, z_log_var = inputs
-        epsilon = self.epsilon
+        epsilon = tf.random.normal(
+            shape=tf.shape(z_mean),
+            mean=0.0,
+            stddev=1.0
+        )
         z_rand = z_mean + K.exp(z_log_var / 2) * epsilon
 
         return K.in_train_phase(z_rand, z_mean, training=training)
