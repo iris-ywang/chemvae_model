@@ -64,29 +64,29 @@ lg.getLogger().setLevel(lg.WARNING)
 
 
 
-# #### Set up GPU info
-# logging.info(f"CUDA Version:  {tf.sysconfig.get_build_info()["cuda_version"]}")
-# logging.info(f"CUDNN Version:  {tf.sysconfig.get_build_info()["cudnn_version"]}")
-#
-# # Check available GPUs
-# gpus = tf.config.list_physical_devices("GPU")
-# if gpus:
-#     logging.info(f"GPUs available: {gpus} \n ")
-# else:
-#     logging.info("No GPU available! \n ")
-#
-# if gpus:
-#     try:
-#         # Set memory growth for each GPU (prevents TensorFlow from using all the GPU memory at once)
-#         for gpu in gpus:
-#             tf.config.experimental.set_memory_growth(gpu, True)
-#
-#         # Make all GPUs visible to TensorFlow
-#         tf.config.set_visible_devices(gpus, "GPU")
-#
-#         logging.info(f"Using GPUs: {gpus} \n")
-#     except RuntimeError as e:
-#         logging.info(f"Error setting GPUs: {e}")
+#### Set up GPU info
+logging.info(f"CUDA Version:  {tf.sysconfig.get_build_info()['cuda_version']}")
+logging.info(f"CUDNN Version:  {tf.sysconfig.get_build_info()['cudnn_version']}")
+
+# Check available GPUs
+gpus = tf.config.list_physical_devices("GPU")
+if gpus:
+    logging.info(f"GPUs available: {gpus} \n ")
+else:
+    logging.info("No GPU available! \n ")
+
+if gpus:
+    try:
+        # Set memory growth for each GPU (prevents TensorFlow from using all the GPU memory at once)
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+
+        # Make all GPUs visible to TensorFlow
+        tf.config.set_visible_devices(gpus, "GPU")
+
+        logging.info(f"Using GPUs: {gpus} \n")
+    except RuntimeError as e:
+        logging.info(f"Error setting GPUs: {e}")
 
 
 
