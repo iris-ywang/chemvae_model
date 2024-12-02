@@ -1,4 +1,6 @@
 import logging
+import json
+from collections import OrderedDict
 
 from chemvae.vae_utils import VAEUtils
 import numpy as np
@@ -121,25 +123,30 @@ def one_hot_via_max_prob(arr: np.array):
     return np.where(arr == np.max(arr, axis=1)[:, None], 1, 0)
 
 
-def main_sa():
-    # user parameters
-    size = 100
-    model_train_size = 12600
-    base_path = '../models/zinc/'
-    test_idx_file_path = '../models/zinc/test_idx.npy'
-    encoder_file = base_path + f'zinc_encoder_iris2_{model_train_size}.h5'
-    decoder_file = base_path + f'zinc_decoder_iris2_{model_train_size}.h5'
-    metrics_filename = f"sa_model_iris2_{model_train_size}_similarity_scores_testsize_{size}.npy"
+def main_sa(model_folder_path: str, metrics_filename: str, test_size):
 
+    # model_train_size = 12600
+    # base_path = '../models/zinc/'
+    # test_idx_file_path = '../models/zinc/test_idx.npy'
+    # encoder_file = base_path + f'zinc_encoder_iris2_{model_train_size}.h5'
+    # decoder_file = base_path + f'zinc_decoder_iris2_{model_train_size}.h5'
+    # metrics_filename = f"sa_model_iris2_{model_train_size}_similarity_scores_testsize_{size}.npy"
+
+    exp_file_path = model_folder_path + "exp.json"
+    exp_file_dict = json.loads(open(exp_file_path).read(),
+                         object_pairs_hook=OrderedDict)
+    test_idx_file_path = exp_file_dict['test_idx_file']
+    encoder_file = exp_file_dict['encoder_weights_file']
+    decoder_file = exp_file_dict['decoder_weights_file']
 
     metrics = vae_sa_similarity(
-        size=size,
+        size=test_size,
         encoder_file=encoder_file,
         decoder_file=decoder_file,
         test_idx_file=test_idx_file_path,
-        exp_file=base_path + 'exp.json',
+        exp_file=exp_file_path,
     )
-    np.save(base_path + f"{metrics_filename}", metrics)
+    np.save(model_folder_path + f"{metrics_filename}", metrics)
     print("Finished!")
 
     return metrics
@@ -170,8 +177,11 @@ def main_pa():
     return metrics
 
 
-
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-    main_sa()
+    main_sa(
+        model_folder_path="../models/chembl/",
+        test_size = 100,
+        metrics_filename="chembl_sa_vae_similarity_testsize_100.npy"
+    )
     # main_pa()
