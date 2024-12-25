@@ -9,7 +9,8 @@ from sklearn.metrics import jaccard_score
 
 
 def vae_sa_similarity(
-        size=200,
+        eval_size=200,
+        demo_size=5,
         encoder_file=None,
         decoder_file=None,
         test_idx_file='../models/zinc/test_idx.npy',
@@ -24,13 +25,13 @@ def vae_sa_similarity(
     )
 
     metrics = []
-    X = vae_sa.smiles_for_encoding[-size:]
-    Xoh = vae_sa.smiles_one_hot_for_encoding[-size:]
-    Z = vae_sa.Z[-size:]
+    X = vae_sa.smiles_for_encoding[-eval_size:]
+    Xoh = vae_sa.smiles_one_hot_for_encoding[-eval_size:]
+    Z = vae_sa.Z[-eval_size:]
     Xoh_r = vae_sa.decode(Z, standardized=False)
     X_r = vae_sa.hot_to_smiles(Xoh_r)
 
-    for i in range(size):
+    for i in range(demo_size):
 
         print(f"Calculating similarity for molecule {i}...")
         print("Original smiles     :", X[i])
@@ -39,10 +40,14 @@ def vae_sa_similarity(
         metrics_oh = jaccard_score(Xoh[i], one_hot_via_max_prob(Xoh_r[i]), average='micro')
 
         print(f"Similarity (one-hot): {metrics_oh}")
+        print(f"Standardised Z: {Z[i]}")
+
+    for i in range(eval_size):
+        metrics_oh = jaccard_score(Xoh[i], one_hot_via_max_prob(Xoh_r[i]), average='micro')
         metrics.append(metrics_oh)
 
+    print(f"Similarity (one-hot) for all evaluation set: {metrics}")
     return metrics
-
 
 
 def vae_pa_similarity(
@@ -140,7 +145,7 @@ def main_sa(model_folder_path: str, metrics_filename: str, test_size):
     decoder_file = exp_file_dict['decoder_weights_file']
 
     metrics = vae_sa_similarity(
-        size=test_size,
+        eval_size=test_size,
         encoder_file=encoder_file,
         decoder_file=decoder_file,
         test_idx_file=test_idx_file_path,
@@ -179,9 +184,5 @@ def main_pa():
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-    main_sa(
-        model_folder_path="../models/chembl/",
-        test_size = 100,
-        metrics_filename="chembl_sa_vae_similarity_testsize_100.npy"
-    )
+    main_sa(model_folder_path="../models/zinc/", metrics_filename="zinc_sa_similarity_25Dec.npy", test_size=200)
     # main_pa()
