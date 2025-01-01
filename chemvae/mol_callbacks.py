@@ -138,3 +138,14 @@ class EncoderDecoderCheckpoint(ModelCheckpoint):
             self.decoder.save(os.path.join(self.p['checkpoint_path'], 'decoder_{}.h5'.format(epoch)))
             if self.prop_pred_model is not None:
                 self.prop_pred_model.save(os.path.join(self.p['checkpoint_path'], 'prop_pred_{}.h5'.format(epoch)))
+
+
+class LossLogger(Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # logs dictionary contains the metrics at the end of the epoch
+        xent_loss = logs.get('x_pred_loss')  # Assumes 'x_pred' is your output name
+        kl_loss = logs.get('z_mean_log_var_loss')  # Assumes 'z_mean_log_var' is your output name
+        total_loss = logs.get('loss')
+
+        print(f"Epoch {epoch + 1} - Total Loss: {total_loss:.4f}, "
+              f"Xent Loss: {xent_loss:.4f}, KL Loss: {kl_loss:.4f}")

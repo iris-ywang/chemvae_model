@@ -368,8 +368,10 @@ def main_no_prop(params):
     vae_anneal_callback = mol_cb.WeightAnnealer_epoch(
             vae_sig_schedule, kl_loss_var, params['kl_loss_weight'], 'vae' )
 
-    csv_clb = CSVLogger(params["history_file"], append=False)
-    callbacks = [ vae_anneal_callback, csv_clb]
+    loss_logger = mol_cb.LossLogger()
+
+    csv_clb = CSVLogger(params["history_file"], append=True)
+    callbacks = [vae_anneal_callback, loss_logger, csv_clb]
 
     # Load data
     if params["data_size"] is None:
@@ -542,11 +544,15 @@ if __name__ == "__main__":
     # args = vars(parser.parse_args())
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-    args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
-    # args = {'exp_file': '../models/zinc/exp.json', 'directory': None}
+    current_dir = os.getcwd()
+
+    # args = {'exp_file': '../models/zinc_paired_model/exp.json', 'directory': None}
+    args = {'exp_file': '../models/zinc/exp.json', 'directory': current_dir}
 
     if args['directory'] is not None:
-        args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
+        os.chdir(args["directory"])  # change to the directory where the experiment file is located
+        logging.info(f"Changed working directory to: {args['directory']}")
+        # args['exp_file'] = os.path.join(args['directory'], args['exp_file'])
 
     params = hyperparameters.load_params(args['exp_file'])
     logging.info(f"All params: {params}")
